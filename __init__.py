@@ -1,2 +1,4 @@
-from core import LatentModel, LatentDynamicalModel, Proposal
-from gplvm.model_uul_messaround import BasisLVM as BasisLVM_uul_mess
+__version__ = "1.0.0"
+__author__ = "Isabel"
+
+from core import GPLVM, DynamicGPLVM, Layer, Proposal
