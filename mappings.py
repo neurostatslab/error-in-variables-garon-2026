@@ -25,6 +25,7 @@ def affine(params, x):
     A, b = params
     return x @ A.T + b[None, :]
 
+
 class IdentityMapping:
     def __call__(self, params, x):
         return x
@@ -34,6 +35,8 @@ class IdentityMapping:
 
     def log_density(self, params):
         return 0
+
+
 
 class EivMapping:
     def __init__(self, neural_mapping = None, behavioral_mapping = None):
@@ -64,26 +67,38 @@ class CompoundMapping:
     def __init__(self, mappings,  dim_names):
         self.mappings = mappings# if isinstance(mappings, list) else [mappings]
         self.dim_names = dim_names
-        print(self.mappings)
-
+        
     def __call__(self, params, xs):
+        # TODO - this is HACKEY fix this
+        params = [params, None]
         
         evals = [mapping(p, xs) for mapping, p in zip(self.mappings, params)]
-
+        '''evals = jax.tree.map(lambda p, mapping: mapping(None, xs) if p is None else mapping(p, xs), tuple(params), tuple(self.mappings),
+                            is_leaf=lambda p: p is None)'''
         #Maps = namedtuple('Maps', self.dim_names)
-
         return evals#Maps(*evals)
 
     def sample(self, key, params):
+        # TODO - this is HACKEY fix this
+        params = [params, None]
         keys = jax.random.split(key, num=len(params))
-
-        samples = [mapping.sample(k, p) for mapping, k, p in zip(self.mappings, keys, params)]
         
+        '''samples = jax.tree.map(lambda p, mapping, keys: mapping.sample(k, None) if p is None else mapping.sample(k, p), 
+                                params, self.mappings, keys,
+                                is_leaf=lambda p: p is None)'''
+        samples = [mapping.sample(k, p) for mapping, k, p in zip(self.mappings, keys, params)]
         return samples
 
     def log_density(self, params):
+        # TODO - this is HACKEY fix this
+        params = [params, None]
+        # TODO - change this back i hate this. 
+        '''dense = jax.tree.map(lambda p, mapping: mapping.log_density(None) if p is None else mapping.log_density(p), 
+                                tuple(params), tuple(self.mappings),
+                                is_leaf=lambda p: p is None)'''
         dense = [mapping.log_density(p) for mapping, p in zip(self.mappings, params)]
-        
+        #print("dense, mappings")
+        #print(dense)
         return jnp.sum(jnp.array(dense))
 
 class WeightedFourierBasisMapping:
@@ -146,6 +161,7 @@ class WeightedFourierBasisMapping:
         return self.nonlinearity(bias + wsin + wcos) # [observations, dim_out]
 
     def sample(self, key, FIXTHIS):
+        # TODO - dont like this
         return (jax.random.normal(
                         key, shape=(self.num_neurons, self.params_per_neuron)
                     )).T

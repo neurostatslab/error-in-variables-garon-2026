@@ -6,27 +6,26 @@ import smc
 import mappings
 import noise_models
 import inference
-from mc_samplers import Roberts
 import matplotlib.pyplot as plt
+from mc_samplers import Roberts
 
 from functools import partial
 from jax import jit
 
 class AbstractGPLVM:
     def __init__(
-            self, num_dims=1, observation=None,
-            num_samples=2**10, mc_scale = 2*jnp.pi, 
-            max_freq=40, method = "LPFGS", opt_params = None
+            self, observation=None,  num_samples=2**10,
+            method = "LPFGS", opt_params = None
         ):
 
         # Construct truncated bases functions
-        self.num_dims = num_dims
         self.observation = observation
         #self.params_per_neuron = observation.mapping.params_per_neuron
+        # TODO - make this a model param, problem pulling this from compound mapping
+
 
         # TODO - maybe move this to inference class
         self.num_samples = num_samples
-        self.mc_scale = mc_scale
         self.method = method
         self.opt_params = opt_params
 
@@ -74,31 +73,28 @@ class AbstractGPLVM:
 
 class GPLVM(AbstractGPLVM):
 
-    def __init__(self, *args, latent_prior = None, sampler = Roberts,
+    def __init__(self, *args, sampler = Roberts(),
                  **kwargs):
         super().__init__(*args, **kwargs)
-        self.latent_prior = latent_prior
         # TODO - messy
         #self.params_per_neuron = self.observation.mapping.mappings[0].params_per_neuron
 
         # Not dynamic, have to specify sampling procedure
-        self.sampler = sampler(self.num_samples, self.num_dims, self.mc_scale)
+        self.sampler = sampler
 
     def marginal_log_likelihood_params(self,params, y, key):
         @partial(jax.vmap, in_axes=(None, 0, None), out_axes=0)
         def _marginal_log_likelihood_params(params, y, key):
             # might need to separate this out
-            xs = self.sampler.sample(key)
+            xs = self.sampler.sample(key, self.num_samples)
             return self.logp_y_given_x(params, y, xs)
         return  logsumexp(_marginal_log_likelihood_params(params, y, key), axis=1)
     
     def simulate(self, key, params, num_observations):
         k1, k2 = jax.random.split(key, 2)
-        '''sampler = self.sampler(num_observations, self.num_dims)
-        x = sampler.sample(key)'''
         
-        x = self.latent_prior.sample(
-            k1, params, num_observations
+        x = self.sampler.sample(
+            k1, num_observations
         )
 
         y = self.observation.sample(

@@ -7,6 +7,8 @@ from scipy.stats.qmc import Sobol
 from functools import partial
 from collections import namedtuple
 
+# TODO - Latent space must norm to 1, unit check noise models
+
 class IsotropicGaussian:
     def __init__(self, log_std):
         self.log_std = log_std
@@ -19,10 +21,22 @@ class IsotropicGaussian:
         z2 = z ** 2
         return jnp.sum(-0.5 * (jnp.log(s2 * 2 * jnp.pi) + z2), axis=-1)
     
-    
     @partial(jit, static_argnums=(0,))
     def sample(self, key, loc):
         return loc + jax.nn.softplus(self.log_std) * jax.random.normal(key, shape=loc.shape)
+
+class Gaussian:
+    def __init__(self, log_std):
+        self.log_std = log_std
+
+    @partial(jit, static_argnums=(0,))
+    def log_density(self, loc, x):
+        return jnp.sum(jax.scipy.stats.norm.logpdf(x, loc=loc, scale = self.log_std), axis = -1)
+    
+    
+    @partial(jit, static_argnums=(0,))
+    def sample(self, key, loc):
+        return loc + self.log_std * jax.random.normal(key, shape=loc.shape)
 
 
 class Poisson:
@@ -69,7 +83,7 @@ class Uniform:
         self.maxval = maxval
     
     @partial(jit, static_argnums=(0,))
-    def log_density(self, params, loc, x):
+    def log_density(self, loc, x):
         num_dims = x.shape[1]
         return jnp.sum(jnp.full(
             x.shape,
@@ -77,7 +91,7 @@ class Uniform:
         ), axis=-1)
 
     @partial(jit, static_argnums=(0,))
-    def sample(self, key, params, loc):
+    def sample(self, key, loc):
         """
         Parameters
         ----------
@@ -168,6 +182,47 @@ class ProjectedNormal:
         y = self.conc * jnp.sin(loc) + jax.random.normal(k2, shape=loc.shape)
         return jnp.arctan2(y, x)
 
+class ProjectedNormalNormed:
+    """
+    TODO - Note: assumes no correlation between dimensions
+    TODO - Add an average function -> circular average
+    Draw random samples from a projected normal distribution for a 1d
+    circular variable, theta. The generative model is
+
+        x ~ N(m1, 1)
+        y ~ N(m2, 1)
+        theta = arctan2(y, x)
+    """
+    def __init__(self, conc):
+        self.conc = conc
+
+    @partial(jit, static_argnums=(0,))
+    def log_density(self, loc, x):
+        """
+        See Equation 1 of Wang & Gelfand, "Directional data analysis under
+        the general projected normal distribution"
+        """
+        x = (x *2*jnp.pi)-jnp.pi
+        loc = (loc *2*jnp.pi)-jnp.pi
+        #print(x)
+        #print(loc)
+        cos_loc = jnp.cos(loc)
+        sin_loc = jnp.sin(loc)
+        D = self.conc * (cos_loc * jnp.cos(x) + sin_loc * jnp.sin(x))
+        F = self.conc * (cos_loc * jnp.sin(x) - sin_loc * jnp.cos(x))
+        return jnp.sum(jnp.log(
+            jax.scipy.stats.norm.pdf(cos_loc) * jax.scipy.stats.norm.pdf(sin_loc)
+            + D * jax.scipy.stats.norm.cdf(D) * jax.scipy.stats.norm.pdf(F)
+        ), axis=-1)
+
+    @partial(jit, static_argnums=(0,))
+    def sample(self, key, loc):
+        loc = (loc *2*jnp.pi)-jnp.pi
+        k1, k2 = jax.random.split(key)
+        x = self.conc * jnp.cos(loc) + jax.random.normal(k1, shape=loc.shape)
+        y = self.conc * jnp.sin(loc) + jax.random.normal(k2, shape=loc.shape)
+        return (jnp.arctan2(y, x) + jnp.pi)/(2*jnp.pi)
+
 class VonMises:
     def __init__(self, kappa):
         self.kappa = kappa
@@ -223,18 +278,16 @@ class CompoundNoiseModel:
     #[f(p, x) for f, p in zip(self.mappings, params)]
     def __init__(self, noise_models, dim_names, data_name = 'Data'):
         self.noise_models = noise_models if isinstance(noise_models, list) else [noise_models]
-        print(self.noise_models)
         self.dim_names = dim_names
         self.data_name = data_name
 
-    #@partial(jit, static_argnums=(0,))
+    @partial(jit, static_argnums=(0,))
     def log_density(self, locs, xs):
-        
         evals = jnp.array([noise.log_density(loc, x) for noise, loc, x in zip(self.noise_models, locs, xs)])
-
+        #evals = jax.tree.map(lambda noise, loc, x: noise.log_density(loc, x), tuple(self.noise_models), tuple(locs), tuple(xs))
         return jnp.sum(evals, axis=0)
         
-    #@partial(jit, static_argnums=(0,))
+    @partial(jit, static_argnums=(0,))
     def sample(self, key, locs):
         """
         Parameters
@@ -249,8 +302,9 @@ class CompoundNoiseModel:
         """
         keys = jax.random.split(key, num=2)
         
+        #samples = jax.tree.map(lambda noise, loc, key: noise.sample(key, loc), tuple(self.noise_models), tuple(locs), tuple(keys))
+        
         samples = [no.sample(k, l) for no, k, l in zip(self.noise_models, keys, locs)]     
         #Data = namedtuple(self.data_name, self.dim_names)
-
         return samples#Data(*samples)
  

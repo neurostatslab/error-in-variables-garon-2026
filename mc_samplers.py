@@ -11,23 +11,17 @@ class Roberts:
     https://gist.github.com/carlosgmartin/1fd4e60bed526ec8ae076137ded6ebab
     """
 
-    def __init__(self, num_points,
-                num_dims,mc_scale, 
+    def __init__(self, num_dims=1,mc_scale=1, 
                 root_iters=10_000):
 
-        self.num_points = num_points
         self.num_dims = num_dims
         self.root_iters = root_iters
         self.mc_scale = mc_scale
 
-        
-        
         root = self._compute_root()
         # Compute basis parameter
-        basis = 1 - (1 / root ** (1 + jnp.arange(self.num_dims)))
+        self.basis = 1 - (1 / root ** (1 + jnp.arange(self.num_dims)))
 
-        # Define sequence without taking modulo 1
-        self.sequence = jnp.arange(self.num_points)[:, None] * basis[None, :]
         
     # Compute the unique positive root of f using the Newton-Raphson method.
     def f(self,x):
@@ -48,11 +42,14 @@ class Roberts:
         root, _ = lax.scan(newton_raphson_update, 1.0, xs = jnp.arange(self.root_iters), length=self.root_iters)
         return root
 
-    def sample(self, key):
+    def sample(self, key, num_points):
+        # Define sequence without taking modulo 1
+        sequence = jnp.arange(num_points)[:, None] * self.basis[None, :]
+        
         # TODO - issue with random seeding - self consistent but doesnt match demo colab, 
         # even with same seed. sequence etc match
         # print(jax.random.uniform(jax.random.PRNGKey(123), shape=[self.num_dims]))
-        return jnp.modf(self.sequence + jax.random.uniform(key, shape=[self.num_dims]))[0] * self.mc_scale
+        return jnp.modf(sequence + jax.random.uniform(key, shape=[self.num_dims]))[0] * self.mc_scale
 
 class UniformSobol:
     ''' this is in the wrong location'''
