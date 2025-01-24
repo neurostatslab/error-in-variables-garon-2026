@@ -58,7 +58,8 @@ class AbstractGPLVM:
     def fit(self, Y, method, opt_params):
         
         _fitting_methods = \
-            dict(lbfgs=inference.LBFGS,
+            dict(adam=inference.Adam,
+                 lbfgs=inference.LBFGS,
                  ula = inference.ULA
                  )
 

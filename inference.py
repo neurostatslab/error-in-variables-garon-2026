@@ -1,5 +1,6 @@
 from mc_samplers import Roberts, Sobol
 import jax
+import optax
 import jaxopt
 import jax.numpy as jnp
 from tqdm import trange, tqdm
@@ -8,6 +9,55 @@ from jax.scipy.special import logsumexp
 from functools import partial
 from jax import jit
 from distrax import MultivariateNormalDiag
+
+class Adam:
+    def __init__(self, model, opt_params):
+        
+        '''if opt_params["init_params"][0]:
+            
+        else:
+            raise Exception("Implement this")'''
+
+        self.model = model
+        self.init_params = opt_params["init_params"]
+        self.save_prior = opt_params["save_prior"]
+        self.opt_key = opt_params["opt_key"]
+        self.init_key = opt_params["init_key"]
+        self.n_iters = opt_params["n_iters"]
+        self.learning_rate = opt_params["lr"]
+
+
+    def fit(self, Y):
+        
+        objective = jax.value_and_grad(self.model.log_posterior_params)
+
+        # Initialize optimization method
+        optimizer = optax.chain(
+            optax.adam(learning_rate=self.learning_rate),
+            optax.scale(-1.0)
+        )
+        est_params = self.init_params
+
+        opt_state = optimizer.init(est_params)
+
+        objhist = []
+        priorhist = []
+
+        for key in tqdm(jax.random.split(self.opt_key, self.n_iters)):
+            val, grads = objective(est_params, Y, key)
+            updates, opt_state = optimizer.update(grads, opt_state)
+            est_params = optax.apply_updates(est_params, updates)
+                
+            if self.save_prior:
+                priorhist.append(self.model.observation.mapping.log_density(est_params))
+            objhist.append(val)
+
+        self.model.params_ = est_params
+        self.model.objhist_ = objhist
+        # TODO - rename this point estimate?
+        
+        if self.save_prior:
+            self.model.priorhist_ = priorhist
 
 class LBFGS:
     def __init__(self, model, opt_params):
@@ -125,8 +175,9 @@ class ULA:
         est_elbo = jnp.mean(log_w)
         return est_log_Z, est_elbo
 
-    def fit(self, Y, n_chains_keep = 4, kde_bandwidth = (-2, -1)):
-        
+    def fit(self, Y, n_chains_keep = 4, kde_bandwidth = (-2, -1), kde_reso = 150, num_importance_iters = 500):
+        # TODO - move these to optimization dict
+        # TODO - set default optimization dict?
         # Initialize optimization method
         est_params = self.init_params
         velocity = jnp.zeros((self.n_chains, self.params_per_neuron, self.num_neurons))
@@ -165,7 +216,7 @@ class ULA:
             self.model.log_posterior_params, in_axes=(0, None, None)
         ))
 
-        hs = jnp.logspace(kde_bandwidth[0], kde_bandwidth[1], 150)
+        hs = jnp.logspace(kde_bandwidth[0], kde_bandwidth[1], kde_reso)
         log_Z_ests = [[] for _ in range(n_chains_keep)]
         elbos = [[] for _ in range(n_chains_keep)]
 
@@ -187,12 +238,13 @@ class ULA:
         log_Z_ests = jnp.array(log_Z_ests)
         elbos = jnp.array(elbos)
 
-        best_h = hs[jnp.argmax(elbos[0])]
+        self.model.best_h_ = hs[jnp.argmax(elbos[0])]
         best_noise_dist = MultivariateNormalDiag(
             jnp.zeros(self.params_per_neuron * self.num_neurons),
-            best_h * jnp.ones(self.params_per_neuron * self.num_neurons)
+            self.model.best_h_ * jnp.ones(self.params_per_neuron * self.num_neurons)
         )
-        num_importance_iters = 500
+
+        
         best_lgZs = [[] for _ in range(n_chains_keep)]
 
         key = self.is_key
