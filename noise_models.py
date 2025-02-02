@@ -4,6 +4,7 @@ from jax import jit
 from jax.scipy.special import logsumexp
 from jax.scipy.special import gamma
 from scipy.stats.qmc import Sobol
+import scipy
 from functools import partial
 from collections import namedtuple
 
@@ -43,14 +44,33 @@ class Poisson:
        
     @partial(jit, static_argnums=(0,))
     def log_density(self, loc, k: int):
-    
-        return jnp.sum(k * jnp.log(loc) - loc - jax.scipy.special.gammaln(k + 1), axis=-1)
+        #return jnp.sum(k * jnp.log(loc) - loc - jax.scipy.special.gammaln(k + 1), axis=-1)
+        # TODO - revisit this - using the built in
+        return jnp.sum(jax.scipy.stats.poisson.logpmf(
+                        k, loc
+                    ), axis=-1)
 
     @partial(jit, static_argnums=(0,))
     def sample(self, key, loc):
 
         return jax.random.poisson(key, loc)
 
+
+class Poisson_old:
+       
+    @partial(jit, static_argnums=(0,))
+    def log_density(self, loc, k: int):
+        #
+        # TODO - revisit this - using the built in
+        '''return jnp.sum(jax.scipy.stats.poisson.logpmf(
+                        k, loc
+                    ), axis=-1)'''
+        return jnp.sum(k * jnp.log(loc) - loc - jax.scipy.special.gammaln(k + 1), axis=-1)
+
+    @partial(jit, static_argnums=(0,))
+    def sample(self, key, loc):
+
+        return jax.random.poisson(key, loc)
 
 class Beta:
 
@@ -126,7 +146,7 @@ class UniformSobol:
             ), axis=-1)
 
     
-    @partial(jit, static_argnums=(0,))
+    #@partial(jit, static_argnums=(0,))
     def sample(self, key, loc):
         """
         Parameters
@@ -143,7 +163,7 @@ class UniformSobol:
         qrng = Sobol(n_dims, seed=0)
         xs = jnp.array(qrng.random(n=n_samples) * \
                         (self.maxval-self.minval))  + self.minval
-       
+
         return xs
 
 class ProjectedNormal:
@@ -202,8 +222,11 @@ class ProjectedNormalNormed:
         See Equation 1 of Wang & Gelfand, "Directional data analysis under
         the general projected normal distribution"
         """
+        # TODO - add assertion - distance between mc samples cant be larger than concentration
+        # or things will get weird
         x = (x *2*jnp.pi)-jnp.pi
         loc = (loc *2*jnp.pi)-jnp.pi
+        # TODO - Pretty sure there is an issue here, look into this, go with von mis for now
         #print(x)
         #print(loc)
         cos_loc = jnp.cos(loc)
@@ -217,11 +240,12 @@ class ProjectedNormalNormed:
 
     @partial(jit, static_argnums=(0,))
     def sample(self, key, loc):
+        print(loc)
         loc = (loc *2*jnp.pi)-jnp.pi
         k1, k2 = jax.random.split(key)
         x = self.conc * jnp.cos(loc) + jax.random.normal(k1, shape=loc.shape)
         y = self.conc * jnp.sin(loc) + jax.random.normal(k2, shape=loc.shape)
-        return (jnp.arctan2(y, x) + jnp.pi)/(2*jnp.pi)
+        return (jnp.arctan2(y, x)+jnp.pi)/(2*jnp.pi)
 
 class VonMises:
     def __init__(self, kappa):
@@ -232,14 +256,34 @@ class VonMises:
         
         S_centered = x - loc
         S_centered = (S_centered - jnp.pi) % (2 * jnp.pi)+ jnp.pi
-        f = jax.scipy.stats.vonmises.logpdf(S_centered, 1/self.kappa)
+        f = jax.scipy.stats.vonmises.logpdf(S_centered, self.kappa)
+        
+        return jnp.sum(f, axis=-1)
+
+    #@partial(jit, static_argnums=(0,))
+    def sample(self, key,loc):
+        loc = loc.block_until_ready()
+        # TODO - No jax.random implementation of von mises :(
+        return scipy.stats.vonmises(loc=loc, kappa=self.kappa).rvs((len(loc)))
+
+class VonMisesNormed:
+    def __init__(self, kappa):
+        self.kappa = kappa
+
+    @partial(jit, static_argnums=(0,))
+    def log_density(self, loc, x):
+        x = (x *2*jnp.pi)
+        loc = (loc *2*jnp.pi)
+        
+        S_centered = x - loc
+        S_centered = (S_centered - jnp.pi) % (2 * jnp.pi)+ jnp.pi
+        f = jax.scipy.stats.vonmises.logpdf(S_centered, self.kappa)
         
         return jnp.sum(f, axis=-1)
 
     @partial(jit, static_argnums=(0,))
     def sample(self, key,loc):
         raise ValueError("Isabel hasn't implemented this yet")
-        
 
 
 class EIVNoiseModel:
@@ -280,11 +324,14 @@ class CompoundNoiseModel:
         self.noise_models = noise_models if isinstance(noise_models, list) else [noise_models]
         self.dim_names = dim_names
         self.data_name = data_name
+        self.evals_ = []
 
-    @partial(jit, static_argnums=(0,))
+
+    #@partial(jit, static_argnums=(0,))
     def log_density(self, locs, xs):
         evals = jnp.array([noise.log_density(loc, x) for noise, loc, x in zip(self.noise_models, locs, xs)])
         #evals = jax.tree.map(lambda noise, loc, x: noise.log_density(loc, x), tuple(self.noise_models), tuple(locs), tuple(xs))
+        
         return jnp.sum(evals, axis=0)
         
     @partial(jit, static_argnums=(0,))

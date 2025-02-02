@@ -26,7 +26,8 @@ class Adam:
         self.n_iters = opt_params["n_iters"]
         self.learning_rate = opt_params["lr"]
 
-
+    # TODO - Pynapple for fit transform?
+    
     def fit(self, Y):
         
         objective = jax.value_and_grad(self.model.log_posterior_params)
@@ -88,6 +89,8 @@ class LBFGS:
 
         objhist = []
         priorhist = []
+        stim_hist = []
+        cond_hist = []
 
         for key in tqdm(jax.random.split(self.opt_key, self.n_iters)):
             est_params, state = solver.update(
@@ -95,7 +98,7 @@ class LBFGS:
             )
             if self.save_prior:
                 priorhist.append(self.model.observation.mapping.log_density(est_params))
-            objhist.append(state.value)
+                objhist.append(state.value)
 
         self.model.params_ = est_params
         self.model.objhist_ = objhist
@@ -192,6 +195,7 @@ class ULA:
         objhist = []
         saved_params = []
         saved_grads = []
+        saved_vals = []
 
         for i in trange(self.n_iters):
             keys = jax.random.split(jax.random.PRNGKey(i), num=self.n_chains)
@@ -204,6 +208,7 @@ class ULA:
             if (i > self.burn_in) and (i % self.save_every) == 0:
                 saved_params.append(est_params)
                 saved_grads.append(grads)
+                saved_vals.append(vals)
 
         self.model.saved_params_ = jnp.array(saved_params)
         self.model.saved_grads_ = jnp.array(saved_grads)

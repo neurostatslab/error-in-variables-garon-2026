@@ -218,3 +218,78 @@ class WeightedLinearMapping:
 
         return jnp.sum(l0)
 
+class WeightedFourierBasisMapping_old:
+
+    def __init__(self, params):
+        self.max_freq = params['max_freq']
+        self.dim_in = params['dim_in']
+        self.tau_decay = params['tau_decay']
+        self.tau_scale = params['tau_scale']
+        self.bias_mean = params['bias_mean']
+        self.bias_std = params['bias_std']
+        self.nonlinearity = params['nonlinearity']
+
+        grid = jnp.meshgrid(
+            *[jnp.arange(self.max_freq + 1) for _ in range(self.dim_in)]
+        )
+        self.lattice = jnp.column_stack(
+            [z.ravel() for z in grid]
+        ).astype(float)[1:]
+        self.num_basis_funcs = self.lattice.shape[0]
+
+        self.tau = self.tau_scale * jnp.exp(
+            -self.tau_decay * jnp.sum(
+                self.lattice, axis=1
+            )
+        )
+        
+
+    def __call__(self, params, x):
+        """
+        lattice.shape = [num_basis_funcs, dim_in]
+        x.shape = [observations, dim_in]
+        sin_coeffs.shape = [num_basis_funcs, dim_out]
+        cos_coeffs.shape = [num_basis_funcs, dim_out]
+        bias.shape = [dim_out]
+        """
+        # coeffs.shape = n_neurons x n_bases
+        # x.shape = n_samples x n_dims
+        # lattice.shape = n_bases x n_dims
+        # z.shape = n_samples x n_bases
+        
+        z = x @ self.lattice.T # [observations, num_basis_funcs]
+        
+        wsin = jnp.sin(z) @ params["sin_coeffs"].T # [observations, dim_out]
+        wcos = jnp.cos(z) @ params["cos_coeffs"].T # [observations, dim_out]
+        
+        return self.nonlinearity(params["bias"] + wsin + wcos) # [observations, dim_out]
+
+    def sample(self, key, params):
+        k0, k1, k2 = jax.random.split(key, num=3)
+
+        weight_params = {
+            "cos_coeffs": jax.random.normal(
+                            k1, shape=(params['num_neurons'], len(self.tau))
+                        ) * self.tau,
+            "sin_coeffs": jax.random.normal(
+                            k2, shape=(params['num_neurons'], len(self.tau))
+                        ) * self.tau,
+            "bias": jax.random.normal(
+                        k0, shape=(params['num_neurons'],)
+                    ) * self.bias_std,
+        }
+        return weight_params
+
+    def log_density(self, params):
+        l0 = jax.scipy.stats.norm.logpdf(
+            params['bias'],
+            loc=self.bias_mean,
+            scale=self.bias_std
+        )
+        l1 = jax.scipy.stats.norm.logpdf(
+            params['cos_coeffs'], loc=0.0, scale=self.tau
+        )
+        l2 = jax.scipy.stats.norm.logpdf(
+            params['sin_coeffs'], loc=0.0, scale=self.tau
+        )
+        return jnp.sum(l0) + jnp.sum(l1) + jnp.sum(l2)

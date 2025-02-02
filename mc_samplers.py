@@ -54,10 +54,11 @@ class Roberts:
 class UniformSobol:
     ''' this is in the wrong location'''
 
-    def __init__(self, minval, maxval):
+    def __init__(self, minval=0, maxval=1, num_dims=1):
         assert maxval > minval
         self.minval = minval
         self.maxval = maxval
+        self.num_dims = num_dims
 
     def log_density(self, params, loc):
         def log_pdf(x):
@@ -68,7 +69,7 @@ class UniformSobol:
             ), axis=-1)
         return log_pdf
     
-    def sample(self, key, params, loc):
+    def sample(self, key, num_points):
         """
         Parameters
         ----------
@@ -80,9 +81,8 @@ class UniformSobol:
         X: Array
             (num_mc_samples x num_dimensions)
         """
-        n_samples, n_dims = loc.shape
-        qrng = Sobol(n_dims, seed=0)
-        xs = jnp.array(qrng.random(n=n_samples) * \
+        # TODO - thisis wrong setting key to fixed val
+        qrng = Sobol(self.num_dims, seed=0)
+        xs = jnp.array(qrng.random(n=num_points) * \
                         (self.maxval-self.minval))  + self.minval
-       
         return xs

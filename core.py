@@ -40,7 +40,7 @@ class AbstractGPLVM:
             "Simulate function must be implemented by subclass."
         )
 
-    @partial(jit, static_argnums=(0,))
+    #@partial(jit, static_argnums=(0,))
     def logp_y_given_x(self, params, y, xs):
         
         log_pdf = self.observation.log_density(
@@ -48,13 +48,37 @@ class AbstractGPLVM:
         )
         return log_pdf
 
-    @partial(jit, static_argnums=(0,))
+    #@partial(jit, static_argnums=(0,))
     def log_posterior_params(self, params, y, key):
         return (
             jnp.sum(self.marginal_log_likelihood_params(params, y, key)) +
             self.observation.mapping.log_density(params)
         )
+
+    @partial(jax.vmap, in_axes=(None, None, 0, None), out_axes=0)
+    def logp_x(self, params, y, X):
+        eiv_flag = True if isinstance(self.observation.mapping, mappings.CompoundMapping) else False
+        y_pred = self.observation.mapping(params, X)[0].T
+        
+        if eiv_flag:
+            y_pred = self.observation.mapping(params, X)[0].T
+            lps = self.observation.noise.noise_models[0].log_density(
+                        jnp.expand_dims(y_pred, -1), y[:, *([jnp.newaxis] * X.shape[-1]), None]
+                    )
+        else:
+            y_pred = self.observation.mapping(params, X).T
+            lps = self.observation.noise.log_density(
+                        jnp.expand_dims(y_pred, -1), y[:, *([jnp.newaxis] * X.shape[-1]), None]
+                    )
+     
+        # Sum over neurons (conditionally independent given x).
+        logp_unnrm = jnp.sum(lps, axis=0)
     
+        # Normalize log density so that the density sums to one.
+        logp = logp_unnrm - logsumexp(logp_unnrm)
+ 
+        return logp
+
     def fit(self, Y, method, opt_params):
         
         _fitting_methods = \
@@ -84,12 +108,12 @@ class GPLVM(AbstractGPLVM):
         self.sampler = sampler
 
     def marginal_log_likelihood_params(self,params, y, key):
+        xs = self.sampler.sample(key, self.num_samples)
         @partial(jax.vmap, in_axes=(None, 0, None), out_axes=0)
         def _marginal_log_likelihood_params(params, y, key):
             # might need to separate this out
-            xs = self.sampler.sample(key, self.num_samples)
             return self.logp_y_given_x(params, y, xs)
-        return  logsumexp(_marginal_log_likelihood_params(params, y, key), axis=1)
+        return logsumexp(_marginal_log_likelihood_params(params, y, key), axis=1)
     
     def simulate(self, key, params, num_observations):
         k1, k2 = jax.random.split(key, 2)
@@ -158,7 +182,7 @@ class Layer:
     def log_density(self,params, x, y):
         loc = self.mapping(params, x) 
         #TODO - double check that specifying noise is correct
-
+       
         return self.noise.log_density(loc, y)
     
     def sample(self, key, params, x):
