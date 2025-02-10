@@ -138,7 +138,7 @@ class WeightedFourierBasisMapping:
         self.tF, self.ttau = F[idx], tau[idx]
         self.params_per_neuron = 1 + 2 * len(self.ttau)
 
-    @partial(jit, static_argnums=(0,))
+    @partial(jax.vmap, in_axes=(None,-1, None), out_axes=1)
     def __call__(self, params, x):
         """
         lattice.shape = [num_basis_funcs, dim_in]
@@ -155,16 +155,19 @@ class WeightedFourierBasisMapping:
         sin_coeffs, cos_coeffs = jnp.array_split(params[1:], 2)
         z = x @ self.tF.T # [observations, num_basis_funcs]
         
-        wsin = jnp.sin(z) @ sin_coeffs # [observations, dim_out]
-        wcos = jnp.cos(z) @ cos_coeffs # [observations, dim_out]
+        wsin = jnp.sin(z) * self.ttau * sin_coeffs # [observations, dim_out]
+        wcos = jnp.cos(z) * self.ttau * cos_coeffs # [observations, dim_out]
         
-        return self.nonlinearity(bias + wsin + wcos) # [observations, dim_out]
+        return self.nonlinearity(bias + jnp.sum(
+            wsin  + wcos, axis = -1
+        )) # [observations, dim_out]
+
 
     def sample(self, key, FIXTHIS):
         # TODO - dont like this
-        return (jax.random.normal(
-                        key, shape=(self.num_neurons, self.params_per_neuron)
-                    )).T
+        return jax.random.normal(
+                        key, shape=(self.params_per_neuron, self.num_neurons)
+                    )
         
     @partial(jit, static_argnums=(0,))
     def log_density(self, params):
@@ -261,7 +264,6 @@ class WeightedFourierBasisMapping_old:
         
         wsin = jnp.sin(z) @ params["sin_coeffs"].T # [observations, dim_out]
         wcos = jnp.cos(z) @ params["cos_coeffs"].T # [observations, dim_out]
-        
         return self.nonlinearity(params["bias"] + wsin + wcos) # [observations, dim_out]
 
     def sample(self, key, params):

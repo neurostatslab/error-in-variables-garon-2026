@@ -40,7 +40,7 @@ class Gaussian:
         return loc + self.log_std * jax.random.normal(key, shape=loc.shape)
 
 
-class Poisson:
+'''class Poisson:
        
     @partial(jit, static_argnums=(0,))
     def log_density(self, loc, k: int):
@@ -53,24 +53,20 @@ class Poisson:
     @partial(jit, static_argnums=(0,))
     def sample(self, key, loc):
 
-        return jax.random.poisson(key, loc)
+        return jax.random.poisson(key, loc)'''
 
-
-class Poisson_old:
+class Poisson:
        
     @partial(jit, static_argnums=(0,))
     def log_density(self, loc, k: int):
         #
-        # TODO - revisit this - using the built in
-        '''return jnp.sum(jax.scipy.stats.poisson.logpmf(
-                        k, loc
-                    ), axis=-1)'''
         return jnp.sum(k * jnp.log(loc) - loc - jax.scipy.special.gammaln(k + 1), axis=-1)
 
     @partial(jit, static_argnums=(0,))
     def sample(self, key, loc):
 
         return jax.random.poisson(key, loc)
+
 
 class Beta:
 
@@ -251,7 +247,7 @@ class VonMises:
     def __init__(self, kappa):
         self.kappa = kappa
 
-    @partial(jit, static_argnums=(0,))
+    #@partial(jit, static_argnums=(0,))
     def log_density(self, loc, x):
         
         S_centered = x - loc
@@ -262,9 +258,9 @@ class VonMises:
 
     #@partial(jit, static_argnums=(0,))
     def sample(self, key,loc):
-        loc = loc.block_until_ready()
         # TODO - No jax.random implementation of von mises :(
-        return scipy.stats.vonmises(loc=loc, kappa=self.kappa).rvs((len(loc)))
+        noise = scipy.stats.vonmises(loc=jnp.zeros((loc.shape[0])), kappa=self.kappa).rvs((loc.shape[0]))
+        return loc+noise
 
 class VonMisesNormed:
     def __init__(self, kappa):
