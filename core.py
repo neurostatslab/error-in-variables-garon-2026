@@ -20,9 +20,7 @@ class AbstractGPLVM:
 
         # Construct truncated bases functions
         self.observation = observation
-        #self.params_per_neuron = observation.mapping.params_per_neuron
-        # TODO - make this a model param, problem pulling this from compound mapping
-
+        self.params_per_neuron = observation.mapping.params_per_neuron
 
         # TODO - maybe move this to inference class
         self.num_samples = num_samples
@@ -40,6 +38,7 @@ class AbstractGPLVM:
             "Simulate function must be implemented by subclass."
         )
 
+    # TODO - these might need to be uncommented
     #@partial(jit, static_argnums=(0,))
     def logp_y_given_x(self, params, y, xs):
         
@@ -57,9 +56,9 @@ class AbstractGPLVM:
 
     @partial(jax.vmap, in_axes=(None, None, 0, None), out_axes=0)
     def logp_x(self, params, y, X):
-        eiv_flag = True if isinstance(self.observation.mapping, mappings.CompoundMapping) else False
-        y_pred = self.observation.mapping(params, X)[0].T
-        
+        eiv_flag = True if isinstance(self.observation.mapping, mappings.EIVMapping) else False
+
+        #y_pred = self.observation.mapping(params, X)[0].T
         if eiv_flag:
             y_pred = self.observation.mapping(params, X)[0].T
             lps = self.observation.noise.noise_models[0].log_density(
@@ -79,7 +78,7 @@ class AbstractGPLVM:
  
         return logp
 
-    def fit(self, Y, method, opt_params):
+    def fit(self, Y, method, opt_params, **kwargs):
         
         _fitting_methods = \
             dict(adam=inference.Adam,
@@ -93,7 +92,7 @@ class AbstractGPLVM:
 
         method = _fitting_methods[method](self, opt_params)
 
-        return method.fit(Y)
+        return method.fit(Y, **kwargs)
 
 
 class GPLVM(AbstractGPLVM):
@@ -101,9 +100,7 @@ class GPLVM(AbstractGPLVM):
     def __init__(self, *args, sampler = Roberts(),
                  **kwargs):
         super().__init__(*args, **kwargs)
-        # TODO - messy
-        #self.params_per_neuron = self.observation.mapping.mappings[0].params_per_neuron
-
+        
         # Not dynamic, have to specify sampling procedure
         self.sampler = sampler
 
@@ -161,7 +158,6 @@ class DynamicGPLVM(AbstractGPLVM):
             x = self.transition.sample(
                 k1, params, x_last
             )
-            
             y = self.observation.sample(
                 k2, params, x
             )
@@ -176,13 +172,14 @@ class Layer:
     """
 
     def __init__(self, mapping, noise):
-        self.mapping = mappings.CompoundMapping(mapping,None) if isinstance(mapping, list) else mapping
-        self.noise = noise_models.CompoundNoiseModel(noise,None)  if isinstance(noise, list) else noise
+        self.mapping = mapping
+        self.noise = noise
+        #self.mapping = mappings.CompoundMapping(mapping,None) if isinstance(mapping, list) else mapping
+        #self.noise = noise_models.CompoundNoiseModel(noise,None)  if isinstance(noise, list) else noise
 
     def log_density(self,params, x, y):
         loc = self.mapping(params, x) 
-        #TODO - double check that specifying noise is correct
-       
+        
         return self.noise.log_density(loc, y)
     
     def sample(self, key, params, x):

@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax import jit
 from jax.scipy.special import logsumexp
 from jax.scipy.special import gamma
@@ -39,27 +40,11 @@ class Gaussian:
     def sample(self, key, loc):
         return loc + self.log_std * jax.random.normal(key, shape=loc.shape)
 
-
-'''class Poisson:
-       
-    @partial(jit, static_argnums=(0,))
-    def log_density(self, loc, k: int):
-        #return jnp.sum(k * jnp.log(loc) - loc - jax.scipy.special.gammaln(k + 1), axis=-1)
-        # TODO - revisit this - using the built in
-        return jnp.sum(jax.scipy.stats.poisson.logpmf(
-                        k, loc
-                    ), axis=-1)
-
-    @partial(jit, static_argnums=(0,))
-    def sample(self, key, loc):
-
-        return jax.random.poisson(key, loc)'''
-
 class Poisson:
        
     @partial(jit, static_argnums=(0,))
     def log_density(self, loc, k: int):
-        #
+        
         return jnp.sum(k * jnp.log(loc) - loc - jax.scipy.special.gammaln(k + 1), axis=-1)
 
     @partial(jit, static_argnums=(0,))
@@ -212,7 +197,7 @@ class ProjectedNormalNormed:
     def __init__(self, conc):
         self.conc = conc
 
-    @partial(jit, static_argnums=(0,))
+    #@partial(jit, static_argnums=(0,))
     def log_density(self, loc, x):
         """
         See Equation 1 of Wang & Gelfand, "Directional data analysis under
@@ -223,8 +208,7 @@ class ProjectedNormalNormed:
         x = (x *2*jnp.pi)-jnp.pi
         loc = (loc *2*jnp.pi)-jnp.pi
         # TODO - Pretty sure there is an issue here, look into this, go with von mis for now
-        #print(x)
-        #print(loc)
+        
         cos_loc = jnp.cos(loc)
         sin_loc = jnp.sin(loc)
         D = self.conc * (cos_loc * jnp.cos(x) + sin_loc * jnp.sin(x))
@@ -234,9 +218,9 @@ class ProjectedNormalNormed:
             + D * jax.scipy.stats.norm.cdf(D) * jax.scipy.stats.norm.pdf(F)
         ), axis=-1)
 
-    @partial(jit, static_argnums=(0,))
+    #@partial(jit, static_argnums=(0,))
     def sample(self, key, loc):
-        print(loc)
+
         loc = (loc *2*jnp.pi)-jnp.pi
         k1, k2 = jax.random.split(key)
         x = self.conc * jnp.cos(loc) + jax.random.normal(k1, shape=loc.shape)
@@ -247,9 +231,8 @@ class VonMises:
     def __init__(self, kappa):
         self.kappa = kappa
 
-    #@partial(jit, static_argnums=(0,))
+    @partial(jit, static_argnums=(0,))
     def log_density(self, loc, x):
-        
         S_centered = x - loc
         S_centered = (S_centered - jnp.pi) % (2 * jnp.pi)+ jnp.pi
         f = jax.scipy.stats.vonmises.logpdf(S_centered, self.kappa)
@@ -258,9 +241,11 @@ class VonMises:
 
     #@partial(jit, static_argnums=(0,))
     def sample(self, key,loc):
-        # TODO - No jax.random implementation of von mises :(
-        noise = scipy.stats.vonmises(loc=jnp.zeros((loc.shape[0])), kappa=self.kappa).rvs((loc.shape[0]))
-        return loc+noise
+        # TODO - Cant find jax.random implementation of von mises :(
+        n_samps = loc.shape
+        noise = jnp.array(scipy.stats.vonmises(loc=np.zeros((n_samps)), 
+                                                kappa=self.kappa).rvs((n_samps)))
+        return (loc+noise)%(2*jnp.pi)
 
 class VonMisesNormed:
     def __init__(self, kappa):
@@ -277,77 +262,54 @@ class VonMisesNormed:
         
         return jnp.sum(f, axis=-1)
 
-    @partial(jit, static_argnums=(0,))
+    #@partial(jit, static_argnums=(0,))
     def sample(self, key,loc):
-        raise ValueError("Isabel hasn't implemented this yet")
+        loc = loc * 2*jnp.pi
+        n_samps = loc.shape
+        noise = jnp.array(scipy.stats.vonmises(loc=np.zeros((n_samps)), 
+                                                kappa=self.kappa).rvs((n_samps)))
+        return ((loc+noise)/(2*jnp.pi))%1
+        '''noise = jnp.array(scipy.stats.vonmises(loc=np.asarray(loc), 
+                                                kappa=self.kappa).rvs((n_samps)))
+        return loc/(2*jnp.pi)'''
 
 
 class EIVNoiseModel:
-    #[f(p, x) for f, p in zip(self.mappings, params)]
-    def __init__(self, neural_noise = None, behavioral_noise = None):
-        self.neural_noise = neural_noise
-        self.behavioral_noise = behavioral_noise
+   
+    def __init__(self, noise_models):
+        self.noise_models = noise_models 
 
     @partial(jit, static_argnums=(0,))
     def log_density(self, locs, xs):
-        evals = [noise.log_density(loc, x) for noise, loc, x in zip(self.noise_models, locs, xs)]
+        evals = jnp.array([noise.log_density(loc, x) for noise, loc, x in zip(self.noise_models, locs, xs)])
+        
         return jnp.sum(evals, axis=0)
         
     @partial(jit, static_argnums=(0,))
     def sample(self, key, locs):
-        """
-        Parameters
-        ----------
-        minval,maxval : float64
-            Range of samples
-
-        Returns
-        -------
-        X: Array
-            (num_mc_samples x num_dimensions)
-        """
+        
         keys = jax.random.split(key, num=2)
+        samples = [no.sample(k, l) for no, k, l in zip(self.noise_models, keys, locs)]     
         
-        samples = [no.sample(k, l) for no, k, l in zip(self.noise_models, keys, locs)]    
-        
-        return tuple(samples)
-
+        return samples
+ 
 
 
 class CompoundNoiseModel:
-    #[f(p, x) for f, p in zip(self.mappings, params)]
-    def __init__(self, noise_models, dim_names, data_name = 'Data'):
+   
+    def __init__(self, noise_models):
         self.noise_models = noise_models if isinstance(noise_models, list) else [noise_models]
-        self.dim_names = dim_names
-        self.data_name = data_name
-        self.evals_ = []
-
-
-    #@partial(jit, static_argnums=(0,))
+    
+    @partial(jit, static_argnums=(0,))
     def log_density(self, locs, xs):
         evals = jnp.array([noise.log_density(loc, x) for noise, loc, x in zip(self.noise_models, locs, xs)])
-        #evals = jax.tree.map(lambda noise, loc, x: noise.log_density(loc, x), tuple(self.noise_models), tuple(locs), tuple(xs))
-        
         return jnp.sum(evals, axis=0)
         
     @partial(jit, static_argnums=(0,))
     def sample(self, key, locs):
-        """
-        Parameters
-        ----------
-        minval,maxval : float64
-            Range of samples
-
-        Returns
-        -------
-        X: Array
-            (num_mc_samples x num_dimensions)
-        """
+       
         keys = jax.random.split(key, num=2)
-        
-        #samples = jax.tree.map(lambda noise, loc, key: noise.sample(key, loc), tuple(self.noise_models), tuple(locs), tuple(keys))
-        
         samples = [no.sample(k, l) for no, k, l in zip(self.noise_models, keys, locs)]     
-        #Data = namedtuple(self.data_name, self.dim_names)
-        return samples#Data(*samples)
+        
+        return samples
  

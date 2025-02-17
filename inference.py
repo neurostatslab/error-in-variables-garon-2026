@@ -149,6 +149,7 @@ class ULA:
         
         objective = jax.value_and_grad(self.model.log_posterior_params)
         # Compute log joint probability and gradient
+
         vals, grads = objective(params, Y, k1)
 
         lr = self.min_lr * ((self.max_lr / self.min_lr) ** jax.random.uniform(k2))
@@ -161,24 +162,35 @@ class ULA:
 
         # Update parameters and velocity
         new_params = params + velocity
+
         new_velocity = velocity + (
             -(self.friction * velocity) + (lr * grads) + noise
         )
-        
         return vals, new_params, new_velocity, grads
 
     def multiple_importance_sampler(self, func, prms, noise_dist, key, Y):
         n, d1, d2 = prms.shape
+        #print("prms")
+        #print(prms.shape)
         k1, k2 = jax.random.split(key, num=2)
         noise = noise_dist.sample(seed=k1, sample_shape=n)
         log_p = func(prms + noise.reshape(-1, d1, d2), Y, k2)
         log_q = noise_dist.log_prob(noise)
         log_w = log_p - log_q
         est_log_Z = logsumexp(log_w) - jnp.log(n)
-        est_elbo = jnp.mean(log_w)
-        return est_log_Z, est_elbo
 
-    def fit(self, Y, n_chains_keep = 4, kde_bandwidth = (-2, -1), kde_reso = 150, num_importance_iters = 500):
+        #print("d1, d2")
+        #print(d1, d2)
+        temp_check = log_w-logsumexp(log_w)
+        # particle weights ^
+        #print("log_w")
+        #print(log_w.shape)
+        # marginal
+        est_elbo = jnp.mean(log_w)
+
+        return est_log_Z, est_elbo, temp_check
+
+    def fit(self, Y, n_chains_keep = 2, kde_bandwidth = (-2, -1), kde_reso = 150, num_importance_iters = 500):
         # TODO - move these to optimization dict
         # TODO - set default optimization dict?
         # Initialize optimization method
@@ -198,6 +210,7 @@ class ULA:
         saved_vals = []
 
         for i in trange(self.n_iters):
+
             keys = jax.random.split(jax.random.PRNGKey(i), num=self.n_chains)
     
             vals, est_params, velocity, grads = batched_update(
@@ -209,6 +222,7 @@ class ULA:
                 saved_params.append(est_params)
                 saved_grads.append(grads)
                 saved_vals.append(vals)
+
 
         self.model.saved_params_ = jnp.array(saved_params)
         self.model.saved_grads_ = jnp.array(saved_grads)
@@ -232,7 +246,7 @@ class ULA:
                     jnp.zeros(self.params_per_neuron * self.num_neurons),
                     h * jnp.ones(self.params_per_neuron * self.num_neurons)
                 )
-                lgZ, elb = self.multiple_importance_sampler(
+                lgZ, elb, _ = self.multiple_importance_sampler(
                     batched_posterior,
                     self.model.saved_params_[:, rank_order_chains[c]],
                     noise_dist,
@@ -256,7 +270,7 @@ class ULA:
         for c in range(n_chains_keep):
             for i in trange(num_importance_iters):
                 subkey, key = jax.random.split(key, 2)
-                lgZ, _ = self.multiple_importance_sampler(
+                lgZ, _, raw_is_weights = self.multiple_importance_sampler(
                     batched_posterior,
                     self.model.saved_params_[:, rank_order_chains[c]],
                     noise_dist,
@@ -264,6 +278,7 @@ class ULA:
                 )
                 best_lgZs[c].append(lgZ)
 
+        self.model.raw_is_weights_ = raw_is_weights
         self.model.best_lgZs_ = jnp.array(best_lgZs)
 
                 
