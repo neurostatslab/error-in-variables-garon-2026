@@ -170,8 +170,7 @@ class ULA:
 
     def multiple_importance_sampler(self, func, prms, noise_dist, key, Y):
         n, d1, d2 = prms.shape
-        #print("prms")
-        #print(prms.shape)
+        
         k1, k2 = jax.random.split(key, num=2)
         noise = noise_dist.sample(seed=k1, sample_shape=n)
         log_p = func(prms + noise.reshape(-1, d1, d2), Y, k2)
@@ -179,16 +178,11 @@ class ULA:
         log_w = log_p - log_q
         est_log_Z = logsumexp(log_w) - jnp.log(n)
 
-        #print("d1, d2")
-        #print(d1, d2)
-        temp_check = log_w-logsumexp(log_w)
-        # particle weights ^
-        #print("log_w")
-        #print(log_w.shape)
+        indep_is_w = log_w-logsumexp(log_w)
         # marginal
         est_elbo = jnp.mean(log_w)
 
-        return est_log_Z, est_elbo, temp_check
+        return est_log_Z, est_elbo, indep_is_w
 
     def fit(self, Y, n_chains_keep = 2, kde_bandwidth = (-2, -1), kde_reso = 150, num_importance_iters = 500):
         # TODO - move these to optimization dict
@@ -270,7 +264,7 @@ class ULA:
         for c in range(n_chains_keep):
             for i in trange(num_importance_iters):
                 subkey, key = jax.random.split(key, 2)
-                lgZ, _, raw_is_weights = self.multiple_importance_sampler(
+                lgZ, _, indep_is_w = self.multiple_importance_sampler(
                     batched_posterior,
                     self.model.saved_params_[:, rank_order_chains[c]],
                     noise_dist,
@@ -278,7 +272,7 @@ class ULA:
                 )
                 best_lgZs[c].append(lgZ)
 
-        self.model.raw_is_weights_ = raw_is_weights
+        self.model.indep_is_w_ = indep_is_w
         self.model.best_lgZs_ = jnp.array(best_lgZs)
 
                 
