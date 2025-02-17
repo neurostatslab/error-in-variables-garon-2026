@@ -242,6 +242,9 @@ class VonMises:
     #@partial(jit, static_argnums=(0,))
     def sample(self, key,loc):
         # TODO - Cant find jax.random implementation of von mises :(
+        num_seed = jax.random.randint(key, (), 0, 2**32).item()
+        np.random.seed(num_seed)
+
         n_samps = loc.shape
         noise = jnp.array(scipy.stats.vonmises(loc=np.zeros((n_samps)), 
                                                 kappa=self.kappa).rvs((n_samps)))
@@ -264,14 +267,14 @@ class VonMisesNormed:
 
     #@partial(jit, static_argnums=(0,))
     def sample(self, key,loc):
+        num_seed = jax.random.randint(key, (), 0, 2**32).item()
+        np.random.seed(num_seed)
+
         loc = loc * 2*jnp.pi
         n_samps = loc.shape
         noise = jnp.array(scipy.stats.vonmises(loc=np.zeros((n_samps)), 
                                                 kappa=self.kappa).rvs((n_samps)))
         return ((loc+noise)/(2*jnp.pi))%1
-        '''noise = jnp.array(scipy.stats.vonmises(loc=np.asarray(loc), 
-                                                kappa=self.kappa).rvs((n_samps)))
-        return loc/(2*jnp.pi)'''
 
 
 class EIVNoiseModel:
