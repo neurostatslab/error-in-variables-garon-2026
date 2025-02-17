@@ -265,7 +265,7 @@ class VonMisesNormed:
         
         return jnp.sum(f, axis=-1)
 
-    #@partial(jit, static_argnums=(0,))
+    
     def sample(self, key,loc):
         num_seed = jax.random.randint(key, (), 0, 2**32).item()
         np.random.seed(num_seed)
@@ -288,7 +288,7 @@ class EIVNoiseModel:
         
         return jnp.sum(evals, axis=0)
         
-    @partial(jit, static_argnums=(0,))
+    
     def sample(self, key, locs):
         
         keys = jax.random.split(key, num=2)
@@ -308,9 +308,8 @@ class CompoundNoiseModel:
         evals = jnp.array([noise.log_density(loc, x) for noise, loc, x in zip(self.noise_models, locs, xs)])
         return jnp.sum(evals, axis=0)
         
-    @partial(jit, static_argnums=(0,))
     def sample(self, key, locs):
-       
+        # TODO Sample shouldnt be jit compiled - seeding scikit issue
         keys = jax.random.split(key, num=2)
         samples = [no.sample(k, l) for no, k, l in zip(self.noise_models, keys, locs)]     
         
