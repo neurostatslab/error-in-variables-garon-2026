@@ -8,6 +8,7 @@ from scipy.stats.qmc import Sobol
 import scipy
 from functools import partial
 from collections import namedtuple
+import tensorflow_probability.substrates.jax.distributions as tfd
 
 # TODO - Latent space must norm to 1, unit check noise models
 
@@ -233,24 +234,18 @@ class VonMises:
 
     @partial(jit, static_argnums=(0,))
     def log_density(self, loc, x):
-        S_centered = x - loc
-        S_centered = (S_centered - jnp.pi) % (2 * jnp.pi)+ jnp.pi
-        f = jax.scipy.stats.vonmises.logpdf(S_centered, self.kappa)
+        vm_dist = tfd.VonMises(loc=loc, concentration=self.kappa)
+        f = vm_dist.log_prob(x)
         
         return jnp.sum(f, axis=-1)
 
-    #@partial(jit, static_argnums=(0,))
+    
     def sample(self, key,loc):
-        # TODO - Cant find jax.random implementation of von mises :(
-        num_seed = jax.random.randint(key, (), 0, 2**32).item()
-        np.random.seed(num_seed)
+        vm_dist = tfd.VonMises(loc=loc, concentration=self.kappa)
+        samps = vm_dist.sample(seed = key)
+        return samps
 
-        n_samps = loc.shape
-        noise = jnp.array(scipy.stats.vonmises(loc=np.zeros((n_samps)), 
-                                                kappa=self.kappa).rvs((n_samps)))
-        return (loc+noise)%(2*jnp.pi)
-
-class VonMisesNormed:
+'''class VonMisesNormed:
     def __init__(self, kappa):
         self.kappa = kappa
 
@@ -274,8 +269,31 @@ class VonMisesNormed:
         n_samps = loc.shape
         noise = jnp.array(scipy.stats.vonmises(loc=np.zeros((n_samps)), 
                                                 kappa=self.kappa).rvs((n_samps)))
-        return ((loc+noise)/(2*jnp.pi))%1
+        return ((loc+noise)/(2*jnp.pi))%1'''
 
+
+class VonMisesNormed:
+    def __init__(self, kappa):
+        self.kappa = kappa
+
+    @partial(jit, static_argnums=(0,))
+    def log_density(self, loc, x):
+        x = (x *2*jnp.pi)-jnp.pi
+        loc = (loc *2*jnp.pi)-jnp.pi
+        
+        vm_dist = tfd.VonMises(loc=loc, concentration=self.kappa)
+        f = vm_dist.log_prob(x)
+        
+        return jnp.sum(f, axis=-1)
+
+    
+    def sample(self, key,loc):
+        
+        loc = (loc * 2*jnp.pi)-jnp.pi
+        vm_dist = tfd.VonMises(loc=loc, concentration=self.kappa)
+        samps = vm_dist.sample(seed = key)
+
+        return (samps+jnp.pi)/(2*jnp.pi)
 
 class EIVNoiseModel:
    

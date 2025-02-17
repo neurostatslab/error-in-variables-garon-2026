@@ -111,7 +111,7 @@ class WeightedFourierBasisMapping:
         self.num_neurons = params['num_neurons']
         self.tol = params['tol']
         self.nonlinearity = params['nonlinearity']
-        
+
         grid = jnp.meshgrid(
             *[jnp.arange(self.max_freq + 1) for _ in range(self.num_dims)]
         )
@@ -220,9 +220,10 @@ class WeightedLinearMapping:
 
         return jnp.sum(l0)
 
-class WeightedFourierBasisMapping_old:
+class WeightedFourierUniformTruncation:
     """
     Basis mapping with uniform truncation
+    Not rotation invariant
     """
     def __init__(self, params):
         self.max_freq = params['max_freq']

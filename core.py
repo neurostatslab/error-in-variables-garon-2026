@@ -28,7 +28,7 @@ class AbstractGPLVM:
         self.opt_params = opt_params
 
     def marginal_log_likelihood_params(self, params, y, key):
-        # TODO - could maybe rename, calculating boith samples and likelihood in this step
+        # TODO - could maybe rename, calculating both samples and likelihood in this step
         raise NotImplementedError(
             "marginal_log_likelihood_params function must be implemented by subclass."
         )
