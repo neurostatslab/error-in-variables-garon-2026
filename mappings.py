@@ -11,9 +11,11 @@ Each function takes in `(params, x)` and returns `x_next`.
 import jax
 from jax import jit
 import jax.numpy as jnp
+import numpy as np
 from functools import partial
 from collections import namedtuple
-
+import itertools
+import matplotlib.pyplot as plt
 
 def identity(params, x):
     return x
@@ -84,6 +86,7 @@ class CompoundMapping:
         dense = [mapping.log_density(p) for mapping, p in zip(self.mappings, params)]
         return jnp.sum(jnp.array(dense))
 
+
 class WeightedFourierBasisMapping:
     """
         Initializes the WeightedFourierBasisMapping from params dict.
@@ -112,18 +115,22 @@ class WeightedFourierBasisMapping:
         self.tol = params['tol']
         self.nonlinearity = params['nonlinearity']
 
-        grid = jnp.meshgrid(
-            *[jnp.arange(self.max_freq + 1) for _ in range(self.num_dims)]
+        '''grid = jnp.meshgrid(
+            *[jnp.arange(-self.max_freq, self.max_freq + 1) for _ in range(self.num_dims)]
         )
 
+        print(make_fourier_freqs(self.num_dims, self.max_freq))
+
         # shape is (max_freq,) x  num_dims
-        shape = tuple(self.max_freq for _ in range(self.num_dims))
+        shape = tuple(self.max_freq*2 for _ in range(self.num_dims))
         # enumerate freqs
         idx = jnp.arange(self.max_freq ** self.num_dims)
+        print(jnp.column_stack(jnp.unravel_index(idx, shape=shape))[1:])
         # shape is # params x num_dims 
         F = 2*jnp.pi * (
-            jnp.column_stack(jnp.unravel_index(idx, shape=shape)))[1:]
-
+            jnp.column_stack(jnp.unravel_index(idx, shape=shape)))[1:]'''
+        F = 2*jnp.pi *make_fourier_freqs(self.num_dims, self.max_freq)
+        
         lam = jnp.sum(F ** 2, axis=1)
 
         # specify kernel
@@ -136,6 +143,7 @@ class WeightedFourierBasisMapping:
         self.tF, self.ttau = F[idx], tau[idx]
         self.params_per_neuron = 1 + 2 * len(self.ttau)
 
+        
     @partial(jax.vmap, in_axes=(None,-1, None), out_axes=1)
     def __call__(self, params, x):
         """
@@ -180,8 +188,8 @@ class WeightedFourierBasisMapping:
         
     @partial(jit, static_argnums=(0,))
     def log_density(self, params):
-        return jnp.sum(jax.scipy.stats.norm.logpdf(params))
-
+        print("SWITCHED TO IMPROPER PRIOR")
+        return jnp.sum(jax.scipy.stats.norm.logpdf(params[1:]))
 
 
 class WeightedLinearMapping:
@@ -192,30 +200,30 @@ class WeightedLinearMapping:
         self.dim_in = params['dim_in']
         self.w_variance = params['w_variance']
         self.nonlinearity = params['nonlinearity']
+        self.params_per_neuron = params['dim_in']
 
     def __call__(self, params, x):
         """
         x.shape = [observations, dim_in]
         """
-        wx = x @ params["w"].T  # [observations, dim_in]
+        print(params.shape)
+        wx = x @ params  # [observations, dim_in]
         return self.nonlinearity(wx) # [observations, dim_in]
 
     def sample(self, key, params):
         
         k0, k1, k2 = jax.random.split(key, num=3)
-
-        params = {
-            "w": jax.random.normal(
+        params  = jax.random.normal(
                             k1, shape=(params['num_neurons'], params['dim_in'])
                         )
-        }
-
+        
+        print(params)
         return params
 
     def log_density(self, params):
         
         l0 = jax.scipy.stats.norm.logpdf(
-            params['w'], loc=0.0, scale=self.w_variance
+            params, loc=0.0, scale=self.w_variance
         )
 
         return jnp.sum(l0)
@@ -292,4 +300,3 @@ class WeightedFourierUniformTruncation:
         l2 = jax.scipy.stats.norm.logpdf(
             params['sin_coeffs'], loc=0.0, scale=self.tau
         )
-        return jnp.sum(l0) + jnp.sum(l1) + jnp.sum(l2)
