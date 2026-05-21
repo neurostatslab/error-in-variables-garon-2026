@@ -38,7 +38,6 @@ class IdentityMapping:
     def log_density(self, params):
         return 0
 
-
 class EIVMapping:
     def __init__(self, mappings):
         self.mappings = mappings# if isinstance(mappings, list) else [mappings]
@@ -86,6 +85,26 @@ class CompoundMapping:
         dense = [mapping.log_density(p) for mapping, p in zip(self.mappings, params)]
         return jnp.sum(jnp.array(dense))
 
+def make_fourier_freqs(d: int, K: int) -> jnp.ndarray:
+    """Basis functions for dimension `d` with max frequency `K`"""
+
+    all_freqs = itertools.product(range(-K, K + 1), repeat=d)
+
+    def in_half_space(m):
+        # Keep m if its first nonzero component is positive.
+        for mi in m:
+            if mi > 0:
+                return True
+            if mi < 0:
+                return False
+
+        # I assume we want to exclude the all-zeros vector as a basis function?
+        # If that's the case, then we'd return False here, otherwise switch this
+        # to return True.
+        return False
+
+    return jnp.array([m for m in all_freqs if in_half_space(m)])
+
 
 class WeightedFourierBasisMapping:
     """
@@ -115,20 +134,6 @@ class WeightedFourierBasisMapping:
         self.tol = params['tol']
         self.nonlinearity = params['nonlinearity']
 
-        '''grid = jnp.meshgrid(
-            *[jnp.arange(-self.max_freq, self.max_freq + 1) for _ in range(self.num_dims)]
-        )
-
-        print(make_fourier_freqs(self.num_dims, self.max_freq))
-
-        # shape is (max_freq,) x  num_dims
-        shape = tuple(self.max_freq*2 for _ in range(self.num_dims))
-        # enumerate freqs
-        idx = jnp.arange(self.max_freq ** self.num_dims)
-        print(jnp.column_stack(jnp.unravel_index(idx, shape=shape))[1:])
-        # shape is # params x num_dims 
-        F = 2*jnp.pi * (
-            jnp.column_stack(jnp.unravel_index(idx, shape=shape)))[1:]'''
         F = 2*jnp.pi *make_fourier_freqs(self.num_dims, self.max_freq)
         
         lam = jnp.sum(F ** 2, axis=1)
