@@ -125,10 +125,21 @@ utils.plot_real_tuning(model, true_tunings)
 utils.plot_latent_recon_real(model, ys, grid_reso = 100, window = 500, grid_max = 1)
 ```
 
-## Examples
+## Hyperparameters
+### Optimization
+### Model
 
 ## Structure
-
+```├── __init__.py         # Top-level exports: SIMPL, load_datafile, ...
+├── core.py             # Abstract model class, fit methods, layer and proposal structure
+├── inference.py        # Implemented inference methods and batching
+├── loader.py           # Data loader for example datasets
+├── mappings.py         # Mappings - fourier for GP prior
+├── mc_samplers.py      # Samplers for marginalizing latent space
+├── noise_models.py     # Noise models for behavioral observations and spiking activity
+├── smc.py              # Particle filter for modeling dependencies over time points
+└── utils.py            # Plotting and helper functions
+```
 ## Citation
 
 If you use this code, please cite:
