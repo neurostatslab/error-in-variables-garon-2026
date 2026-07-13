@@ -136,7 +136,7 @@ def plot_latent_recon_sim(model, ys, xs_true, grid_reso = 100, window = 500, gri
             est_logpost = model.logp_x(model.params_, ys, x_grid)
 
     axes[2].imshow(jnp.exp(est_logpost)[:window].T, aspect='auto')
-    axes[2].plot(xs_true[:window]*grid_reso, marker='o', color = 'r', linestyle="", s = .5, label="MAP Est.")
+    axes[2].plot(xs_true[:window]*grid_reso, marker='o', color = 'r', linestyle="", markersize = 1, label="MAP Est.")
     axes[2].legend()
     axes[2].set(xlabel="Time", ylabel="Latent", title="Latent posterior")
     # MAP estimates of x
