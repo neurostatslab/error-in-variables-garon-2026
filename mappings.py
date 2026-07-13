@@ -193,7 +193,6 @@ class WeightedFourierBasisMapping:
         
     @partial(jit, static_argnums=(0,))
     def log_density(self, params):
-        print("SWITCHED TO IMPROPER PRIOR")
         return jnp.sum(jax.scipy.stats.norm.logpdf(params[1:]))
 
 
