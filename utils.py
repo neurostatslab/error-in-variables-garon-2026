@@ -251,7 +251,7 @@ def plot_real_tuning(model, true_tuning, ys, grid_max = 1, grid_reso=100, ula_fl
         est_tunings = model.observation.mapping(model.params_, x_grid)
         for i, ax in enumerate(axes.ravel()):
             ax.plot(jnp.linspace(0, 1, true_tuning.shape[1]), true_tuning[i,:], color="k", alpha=1., lw = 4, label="generative")
-            ax.plot(bins[:-1], obs_tuning[i, :], color="lightgrey", alpha=.8,  label="observed", lw=2)
+            ax.plot(bins[:-1], obs_tuning[i, :], color="silver", alpha=.8,  label="observed", lw=4)
             if eiv_flag:
                 ax.plot(x_grid, jnp.roll(est_tunings[0][:,i], 0), color="limegreen", lw=4, alpha=.8, dashes=[2, 2], label="eiv")
             else:    
