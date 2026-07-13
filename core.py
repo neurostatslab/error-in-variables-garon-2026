@@ -217,14 +217,7 @@ class AbstractGPLVM:
             dict(adam=inference.Adam,
                  lbfgs=inference.LBFGS,
                  sgd=inference.SGD,
-                 batched_Adam = inference.batched_Adam,
-                 ula = inference.ULA,
-                 parallel_SGD = inference.parallel_SGD,
-                 frequency_march = inference.FrequencyMarching,
-                 frequency_march_adam = inference.FrequencyMarchAdam,
-                 stopping_adam = inference.stoppingAdam,
-                 allAdam = inference.allAdam,
-                 adamLossChange = inference.allAdam_losschange
+                 ula = inference.ULA
                  )
 
         if method not in _fitting_methods:
