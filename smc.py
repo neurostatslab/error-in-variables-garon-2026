@@ -55,17 +55,17 @@ def filter(
 
         # propagation step (Eq. 2.15 in Naesseth)
         x_t, log_q_t = sample_proposal(k2, x_last[i])
-        # TODO - Changed here
+        
         # reweighting step (Eq. 2.16 in Naesseth)
         log_weights = ( # all n_samps x n_dims
             log_transition_prob(params, x_t, x_last[i])
             + logp_y_given_x(params, tuple([obs[None,:] for obs in y_t]), x_t)
             - log_q_t
-                    ) #(y_t[0][None,:], y_t[1][None,:])  tuple([obs[None,:] for obs in y_t])
+                    ) 
        
         # Compute log sum of particle weights.
         lse_weights = logsumexp(log_weights)
-        #print(log_weights.shape)
+        
         # Normalize particle weights to sum to one.
         weights = jnp.exp(log_weights - lse_weights)
 
@@ -78,8 +78,7 @@ def filter(
     # Initialize carry tuple.
     x_init, log_q_init = initialize_proposal(key, num_particles)
     
-    # TODO - Changed here
-    log_weights_init = ( # ys[:1, :]   (ys[0][:1, :], ys[1][:1, :])   tuple([obs[None,:] for obs in ys])
+    log_weights_init = ( 
         logp_y_given_x(params, tuple([obs[:1,:] for obs in ys]), x_init) - log_q_init
     )
     # should be size: (num_particles)
@@ -88,7 +87,6 @@ def filter(
     init_carry = (x_init, weights_init)
 
 
-    # TODO - Changed here
     # Specify inputs at each iteration.
     inputs = (
         jax.random.split(key, (len(ys[0]), 2)), ys
@@ -107,3 +105,4 @@ def log_marginal_likelihood(params, y, key, prop_init,
                     logp_y_given_x, num_samples
     )
     return jnp.sum(log_avg_weights)
+
