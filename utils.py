@@ -246,8 +246,8 @@ def plot_real_tuning(model, true_tuning, grid_max = 1, grid_reso=100, ula_flag =
                 ax.plot(x_grid, jnp.roll(est_tunings[0][:,i], 0), color="g", alpha=.8, dashes=[2, 2], label="est")
             else:    
                 ax.plot(x_grid, jnp.roll(est_tunings[:,i], 0), color="g", alpha=.8, dashes=[2, 2], label="est")
-    [ax.set_xlabel("Latent or Observed") for ax in axes[:, -1]]
-    [ax.set_ylabel("Firing Rate") for ax in axes[0, :]]
+    [ax.set_xlabel("Latent or Observed") for ax in axes[-1, :]]
+    [ax.set_ylabel("Firing Rate") for ax in axes[:, 0]]
     axes[-1, -1].legend()
     fig.suptitle("true vs. estimated tuning")
     fig.tight_layout()
