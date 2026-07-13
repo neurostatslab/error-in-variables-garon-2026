@@ -54,7 +54,7 @@ import jax.numpy as jnp
 from jax.scipy.special import logsumexp
 from functools import partial
 import smc
-import smc_adaptive
+
 import mappings
 import noise_models
 import inference
