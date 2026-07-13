@@ -2,6 +2,14 @@ import matplotlib.pyplot as plt
 import jax.numpy as jnp
 import mappings
 
+def get_obs_tuning(n_bins, n_neurons, spikes, headdir):
+    bins = np.linspace(0, 1, n_bins+1)
+    tuning_curves = np.zeros((n_neurons, n_bins))
+    digi = np.digitize(headdir, bins, right = True)
+    for i in range(n_neurons):
+        tuning_curves[i, :] = [np.nanmean(spikes[np.where(digi==j)[0],i]) for j in range(n_bins)]
+    return tuning_curves, bins
+    
 def make_xgrid(num_latent_dims, num_grid_pts, grid_max = 1):
     X = jnp.array(jnp.meshgrid(
         *[jnp.linspace(0,grid_max, num_grid_pts) for _ in range(num_latent_dims)]
@@ -218,11 +226,11 @@ def plot_real_data_1D(xs_obs, ys, tuning, n_neurs = 5, n_timesteps=300, grid_max
     plt.show()
     return axes
 
-def plot_real_tuning(model, true_tuning, grid_max = 1, grid_reso=100, ula_flag = False):
+def plot_real_tuning(model, true_tuning, ys, grid_max = 1, grid_reso=100, ula_flag = False):
     eiv_flag = True if isinstance(model.observation.mapping, mappings.EIVMapping) else False
     
     fig, axes = plt.subplots(5, 3, sharex=True, figsize=(10,10))
-
+    obs_tuning, bins = get_obs_tuning(20, ys[0].shape[1], ys[0], ys[1])
     x_grid = make_xgrid(1, grid_reso, grid_max)
     if ula_flag:
 
@@ -231,21 +239,22 @@ def plot_real_tuning(model, true_tuning, grid_max = 1, grid_reso=100, ula_flag =
             curr_param = model.saved_params_[j][chain_ind,:,:]
             est_tunings = model.observation.mapping(curr_param, x_grid)
             for i, ax in enumerate(axes.ravel()):
-                ax.plot(jnp.linspace(0, 1, true_tuning.shape[0]), true_tuning[:,i], color="k", alpha=.8, label="true")
+                ax.plot(jnp.linspace(0, 1, true_tuning.shape[0]), true_tuning[:,i], color="k", alpha=.8, label="generative")
                 if eiv_flag:
-                    ax.plot(x_grid, jnp.roll(est_tunings[0][:,i], 0), color="g", alpha=.8, dashes=[2, 2], label="est")
+                    ax.plot(x_grid, jnp.roll(est_tunings[0][:,i], 0), color="g", alpha=.8, dashes=[2, 2], label="eiv")
                 else:    
-                    ax.plot(x_grid, jnp.roll(est_tunings[:,i], 0), color="g", alpha=.8, dashes=[2, 2], label="est")
+                    ax.plot(x_grid, jnp.roll(est_tunings[:,i], 0), color="g", alpha=.8, dashes=[2, 2], label="eiv")
 
 
     else: 
         est_tunings = model.observation.mapping(model.params_, x_grid)
         for i, ax in enumerate(axes.ravel()):
-            ax.plot(jnp.linspace(0, 1, true_tuning.shape[1]), true_tuning[i,:], color="k", alpha=.8,  label="true")
+            ax.plot(jnp.linspace(0, 1, true_tuning.shape[1]), true_tuning[i,:], color="k", alpha=.8, lw = 2, label="generative")
+            ax.plot(bins, obs_tuning, color="grey", alpha=.8,  label="observed")
             if eiv_flag:
-                ax.plot(x_grid, jnp.roll(est_tunings[0][:,i], 0), color="g", alpha=.8, dashes=[2, 2], label="est")
+                ax.plot(x_grid, jnp.roll(est_tunings[0][:,i], 0), color="g", alpha=.8, dashes=[2, 2], label="eiv")
             else:    
-                ax.plot(x_grid, jnp.roll(est_tunings[:,i], 0), color="g", alpha=.8, dashes=[2, 2], label="est")
+                ax.plot(x_grid, jnp.roll(est_tunings[:,i], 0), color="g", alpha=.8, dashes=[2, 2], label="eiv")
     [ax.set_xlabel("Latent or Observed") for ax in axes[-1, :]]
     [ax.set_ylabel("Firing Rate") for ax in axes[:, 0]]
     axes[-1, -1].legend()
