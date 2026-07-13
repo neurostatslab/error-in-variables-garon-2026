@@ -3,11 +3,11 @@ import jax.numpy as jnp
 import mappings
 
 def get_obs_tuning(n_bins, n_neurons, spikes, headdir):
-    bins = np.linspace(0, 1, n_bins+1)
-    tuning_curves = np.zeros((n_neurons, n_bins))
-    digi = np.digitize(headdir, bins, right = True)
+    bins = jnp.linspace(0, 1, n_bins+1)
+    tuning_curves = jnp.zeros((n_neurons, n_bins))
+    digi = jnp.digitize(headdir, bins, right = True)
     for i in range(n_neurons):
-        tuning_curves[i, :] = [np.nanmean(spikes[np.where(digi==j)[0],i]) for j in range(n_bins)]
+        tuning_curves[i, :] = [jnp.nanmean(spikes[jnp.where(digi==j)[0],i]) for j in range(n_bins)]
     return tuning_curves, bins
     
 def make_xgrid(num_latent_dims, num_grid_pts, grid_max = 1):
