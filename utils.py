@@ -136,23 +136,24 @@ def plot_latent_recon_sim(model, ys, xs_true, grid_reso = 100, window = 500, gri
             est_logpost = model.logp_x(model.params_, ys, x_grid)
 
     axes[2].imshow(jnp.exp(est_logpost)[:window].T, aspect='auto')
-    axes[2].plot(xs_true[:window]*grid_reso, marker='o', color = 'r', linestyle="")
-    axes[2].set(xlabel="Time", ylabel="Angle", title="Latent posterior")
+    axes[2].plot(xs_true[:window]*grid_reso, marker='o', color = 'r', linestyle="", s = .5, label="MAP Est.")
+    axes[2].legend()
+    axes[2].set(xlabel="Time", ylabel="Latent", title="Latent posterior")
     # MAP estimates of x
 
     est_x_map = x_grid[jnp.argmax(est_logpost, axis=1)].ravel()
-    axes[1].set(xlabel="Time", ylabel="Angle", title="Reconstruction")
+    axes[1].set(xlabel="Time", ylabel="Latent", title="Reconstruction Over Time")
     if eiv_flag:
         axes[1].plot((ys[1][:window]), color="orange", lw=2, label = "Observed")
     axes[1].plot(est_x_map[:window], label = "Estimate",  color='#0081ff')
     axes[1].plot(xs_true[:window], label = "True",  color='k')
     axes[1].legend()
     
-    axes[0].set(xlabel="True Latent", ylabel="Recon (or observed)", title="Reconstruction vs True")
+    axes[0].set(xlabel="True Latent", ylabel="Reconstructed Latent & Observed Behavior", title="Reconstruction Performance")
     
     if eiv_flag:
-        axes[0].scatter(xs_true, ys[1], label="Observed")
-    axes[0].scatter(xs_true, est_x_map, label="Estimate")
+        axes[0].scatter(xs_true, ys[1], label="Observed Behavior")
+    axes[0].scatter(xs_true, est_x_map, label="Reconstructed Latent")
     axes[0].legend()
 
 
