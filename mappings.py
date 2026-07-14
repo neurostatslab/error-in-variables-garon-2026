@@ -116,8 +116,6 @@ class WeightedFourierBasisMapping:
                 - 'num_dims' (int): Input space dimensionality.
                 - 'len_scale' (float): Length scale for the kernel.
                 - 'out_scale' (float): Output scale for the kernel.
-                - 'bias_mean' (float): Mean of bias term.
-                - 'bias_std' (float): Standard deviation of bias term.
                 - 'num_neurons' (int): Number of neurons.
                 - 'tol' (float): Threshold for truncating small frequencies.
                 - 'nonlinearity' (callable): Nonlinear activation function.
@@ -128,8 +126,6 @@ class WeightedFourierBasisMapping:
         self.num_dims = params['num_dims']
         self.len_scale = params['len_scale']
         self.out_scale = params['out_scale']
-        self.bias_mean = params['bias_mean']
-        self.bias_std = params['bias_std']
         self.num_neurons = params['num_neurons']
         self.tol = params['tol']
         self.nonlinearity = params['nonlinearity']
