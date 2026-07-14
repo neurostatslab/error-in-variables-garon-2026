@@ -7,6 +7,7 @@ import time
 import jax.numpy as jnp
 from tqdm import trange, tqdm
 from jax.scipy.special import logsumexp
+import inspect
 from functools import partial
 from jax import jit
 from distrax import MultivariateNormalDiag
