@@ -51,18 +51,20 @@ Notes
 
 import jax
 import jax.numpy as jnp
+from jax import jit
 from jax.scipy.special import logsumexp
-from functools import partial
-import smc
 
+import inspect
+from functools import partial
+
+
+import smc
 import mappings
 import noise_models
 import inference
 import matplotlib.pyplot as plt
 from mc_samplers import Roberts
 
-from functools import partial
-from jax import jit
 
 class AbstractGPLVM:
     """Base class for GP-style latent-variable models.
