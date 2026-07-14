@@ -264,10 +264,10 @@ def plot_real_tuning(model, true_tuning, ys, grid_max = 1, grid_reso=100, ula_fl
     else: 
         est_tunings = model.observation.mapping(model.params_, x_grid)
         for i, ax in enumerate(axes.ravel()):
-            ax.plot(jnp.linspace(0, 1, true_tuning.shape[1]), true_tuning[i,:], color="k", alpha=1., lw = 4, label="generative")
-            ax.plot(bins[:-1], obs_tuning[i, :], color="silver", alpha=.8,  label="observed", lw=4)
+            ax.plot(jnp.linspace(0, 1, true_tuning.shape[1]), true_tuning[i,:], color="k", alpha=1., lw = 2, label="generative")
+            ax.plot(bins[:-1], obs_tuning[i, :], color="silver", alpha=.8,  label="observed", lw=2)
             if eiv_flag:
-                ax.plot(x_grid, jnp.roll(est_tunings[0][:,i], 0), color="limegreen", lw=4, alpha=.8, dashes=[2, 2], label="eiv")
+                ax.plot(x_grid, jnp.roll(est_tunings[0][:,i], 0), color="limegreen", lw=2, alpha=.8, dashes=[2, 2], label="eiv")
             else:    
                 ax.plot(x_grid, jnp.roll(est_tunings[:,i], 0), color="limegreen", alpha=.8, dashes=[2, 2], label="eiv")
     [ax.set_xlabel("Latent or Observed") for ax in axes[-1, :]]
