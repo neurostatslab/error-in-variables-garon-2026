@@ -438,3 +438,185 @@ class Proposal:
 
         return x
 
+def _build_noise(model, args):
+        
+    if not inspect.isclass(model):
+        return model  # already an instance
+    
+    if args is None:
+        return model()
+        
+    return model(args)
+
+class EIV(GPLVM):
+
+    def __init__(self, 
+        len_scale, out_scale, kappa,
+        num_dims,num_neurons,
+        *,
+        max_freq=30, basis_tol=1e-3, 
+        nonlinearity=lambda x: softplus(x),
+        spike_noise = noise_models.Poisson,
+        behav_noise = noise_models.VonMisesNormed,
+        behav_obs_kwargs=None,
+        spike_obs_kwargs= None,
+        num_samples=512, sampler=None,
+        sim_key = None
+        ):
+
+        self.num_neurons = num_neurons
+        self.num_dims = num_dims
+        
+        self.basis_params = {
+            "max_freq": max_freq,
+            "num_dims": num_dims,
+            "out_scale": out_scale,
+            "len_scale": len_scale,
+            "num_neurons": num_neurons,
+            "tol": basis_tol,
+            "nonlinearity": nonlinearity,
+        }
+
+        behav_obs_args = [kappa] + (behav_obs_kwargs or [])
+        
+        observation = Layer(
+            mapping=mappings.EIVMapping(
+                [
+                    mappings.WeightedFourierBasisMapping(self.basis_params),
+                    mappings.IdentityMapping(),
+                ]
+            ),
+            noise=noise_models.EIVNoiseModel(
+                [
+                    _build_noise(spike_noise, spike_obs_kwargs),
+                    _build_noise(behav_noise, behav_obs_args),
+                ]
+            ),
+        )
+
+        if sampler is None:
+            sampler = Roberts(num_dims=num_dims)
+
+        super().__init__(observation=observation, sampler=sampler, num_samples=num_samples)
+
+        self._sim_key = sim_key if sim_key is not None else jax.random.PRNGKey(0)
+        self.params_ = None
+
+    
+
+
+    def simulate(self, num_steps, true_params=None, key=None):
+
+        if key is None:
+            self._sim_key, key = jax.random.split(self._sim_key)
+
+        if true_params is None:
+            true_params = jax.random.normal(
+                    key, shape=(self.params_per_neuron, self.num_neurons)
+                )
+            
+        self.true_params = true_params
+        # Base class `simulate` has signature (key, params, num_observations).
+        return super().simulate(key, true_params, num_steps)
+
+
+
+class DynamicEIV(DynamicGPLVM):
+
+    def __init__(self, 
+        len_scale, out_scale, kappa,
+        num_dims,num_neurons,proposal_concentration,
+        *,
+        max_freq=30, basis_tol=1e-3, 
+        nonlinearity=lambda x: softplus(x),
+        spike_noise = noise_models.Poisson,
+        behav_noise = noise_models.VonMisesNormed,
+        proposal_noise = noise_models.VonMisesNormed,
+        proposal_kwargs = None,
+        behav_obs_kwargs = None,
+        spike_obs_kwargs = None,
+        num_samples=100, sim_key = None
+        ):
+
+        self.num_neurons = num_neurons
+        self.num_dims = num_dims
+        
+        self.basis_params = {
+            "max_freq": max_freq,
+            "num_dims": num_dims,
+            "out_scale": out_scale,
+            "len_scale": len_scale,
+            "num_neurons": num_neurons,
+            "tol": basis_tol,
+            "nonlinearity": nonlinearity,
+        }
+
+        behav_obs_args = [kappa] + (behav_obs_kwargs or [])
+        proposal_args = [proposal_concentration] + (proposal_kwargs or [])
+        
+        proposal = Proposal(
+                    layer=Layer(
+                        mapping=mappings.identity,
+                        noise=_build_noise(proposal_noise, proposal_args)
+                    ),
+                    params= jnp.array(proposal_concentration),
+                    init_params=jnp.array(proposal_concentration),
+                    init_loc = jnp.zeros(self.num_dims)                   
+                )
+
+        transition=Layer(
+                    mapping=mappings.identity,
+                    noise= _build_noise(proposal_noise, proposal_args)
+                )
+
+        observation = Layer(
+            mapping=mappings.EIVMapping(
+                [
+                    mappings.WeightedFourierBasisMapping(self.basis_params),
+                    mappings.IdentityMapping(),
+                ]
+            ),
+            noise=noise_models.EIVNoiseModel(
+                [
+                    _build_noise(spike_noise, spike_obs_kwargs),
+                    _build_noise(behav_noise, behav_obs_args),
+                ]
+            ),
+        )
+
+        super().__init__(transition=transition,
+                        observation=observation, 
+                        proposal=proposal,
+                         num_samples=num_samples)
+
+        self._sim_key = sim_key if sim_key is not None else jax.random.PRNGKey(0)
+        self.params_ = None
+
+
+
+    def simulate(self, num_steps, true_params=None, key=None):
+
+        if key is None:
+            self._sim_key, key = jax.random.split(self._sim_key)
+
+        if true_params is None:
+            true_params = jax.random.normal(
+                    key, shape=(self.params_per_neuron, self.num_neurons)
+                )
+            
+        self.true_params = true_params
+        # Base class simulate(key, params, num_observations).
+
+        xs_true, ys = super().simulate(
+                    key=key,
+                    params=self.true_params,
+                    x_init=jnp.zeros(self.num_dims)[None,:], 
+                    num_timesteps=num_steps 
+                    )
+        
+        ys = tuple([jnp.squeeze(ys[0]), ys[1][:,:,0]])
+        xs_true = jnp.squeeze(xs_true)
+
+        return xs_true, ys
+
+    
