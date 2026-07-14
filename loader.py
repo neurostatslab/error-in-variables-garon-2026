@@ -277,6 +277,11 @@ class BurakGridCells:
         x = ((np.concatenate((dataset['task'][0]['tracking']['x'],
                             dataset['task'][1]['tracking']['x']))))#+80)/150)*scale
         x = ((x - np.min(x))/150)*scale
+
+        y = ((np.concatenate((dataset['task'][0]['tracking']['y'],
+                            dataset['task'][1]['tracking']['y']))))#+80)/150)*scale
+        y = ((y - np.min(y))/150)*scale
+
         
         z = np.concatenate((dataset['task'][0]['tracking']['z'],
                             dataset['task'][1]['tracking']['z']))
