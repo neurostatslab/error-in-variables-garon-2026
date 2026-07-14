@@ -10,6 +10,7 @@ from jax.scipy.special import logsumexp
 from functools import partial
 from jax import jit
 from distrax import MultivariateNormalDiag
+import numpy as np
 
 """
 inference.py
