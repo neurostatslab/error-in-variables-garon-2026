@@ -62,12 +62,10 @@ To - Do
 - ADD DIMENSIONS
 """
 
-class Adam:
-    """Adam optimizer for simultaneous MAP estimation over a fixed batch of trials.
 
-    Uses ``jax.vmap`` to evaluate ``model.log_posterior_params`` over all trials
-    in parallel, then sums the log-likelihoods and adds a single log-prior term
-    before computing gradients.
+class Adam:
+    """Adam optimizer for MAP estimation, with either full-batch or
+     minibatch over a fixed set of trial windows.
 
     ---> Primarily used for particle filter, smoothing over fixed windows of time
          smaller than the full recording duration
@@ -81,53 +79,92 @@ class Adam:
     opt_params : dict
         Configuration dictionary with the following keys:
 
-        init_params : pytree
-            Initial parameter values.
         save_prior : bool
-            If ``True``, record ``log_density(params)`` at every iteration.
+            If ``True``, record ``log_density(params)`` at every step.
         opt_key : jax.random.PRNGKey
-            Key used to generate per-iteration random keys.
+            Key used to generate per-step random keys and epoch shuffles.
         init_key : jax.random.PRNGKey
             Reserved initialisation key (unused when ``init_params`` is given).
         n_iters : int
-            Number of gradient steps.
-        batch_size : int
-            Number of trials in the batch. If False, Optimize over the full dataset.
+            Number of gradient steps in full-batch mode, or number of
+            *epochs* (full passes over all windows) in minibatch mode.
+        batch_size : int or False
+            Window length (in timesteps) used to reshape ``Y`` into
+            ``(num_batch, batch_size, n)``. Required (not ``False``) when
+            ``minibatch=True``.
+        minibatch : bool
+            If ``True``, train with classic minibatch SGD: each step uses
+            exactly one randomly-selected window (no replacement), cycling
+            through all windows once per epoch. If ``False`` (default),
+            uses the original full-batch behavior: every step computes the
+            gradient over *all* windows at once via ``jax.vmap``.
+        scale_likelihood : bool
+            Only used when ``minibatch=True``. If ``True`` (default), the
+            single-window log-likelihood is scaled by ``num_batch`` so its
+            expectation over a shuffled epoch matches the true full-data
+            log-likelihood sum -- this keeps gradient step sizes and the
+            relative weight of the prior comparable to full-batch training.
+            Set ``False`` to use the raw, unscaled per-window log-likelihood.
         lr : float or optax schedule
             Learning rate for ``optax.adam``.
-        tol : float or False
-            Relative loss-change stopping tolerance. If ``False``, runs for
-            exactly ``n_iters`` steps with no early stopping. Otherwise stops
-            once ``|val - prev_val| / (|prev_val| + eps) < tol_loss``.
+        tol_loss : float or False
+            Relative loss-change stopping tolerance. In full-batch mode this
+            is checked every step; in minibatch mode it's checked once per
+            epoch (against the mean loss over that epoch), since per-step
+            loss in SGD is inherently noisy. If ``False``, disables early
+            stopping and runs for exactly ``n_iters`` steps/epochs.
 
     Attributes
     ----------
     model.params_ : pytree
         Estimated parameters after optimisation.
     model.objhist_ : list of float
-        Total log-posterior (summed over trials) at every iteration.
+        Per-step loss (full-batch mode) or per-window loss (minibatch mode).
     model.priorhist_ : list of float
-        Log-prior at every iteration (only if ``save_prior=True``).
+        Log-prior at every step (only if ``save_prior=True``).
     model.g_norms_ : list of float
-        Relative gradient norm at every iteration, for diagnostics only
-        (only if ``tol_loss`` is set; not used for stopping).
+        Relative gradient norm per step, diagnostics only (full-batch,
+        ``tol_loss`` set) -- not populated in minibatch mode.
     model.rel_loss_hist_ : list of float
-        Relative loss change at every iteration (only if ``tol_loss`` is set).
+        Relative loss change -- per step (full-batch) or per epoch (minibatch).
     model.iters_run_ : int
-        Number of iterations actually run (only if ``tol_loss`` is set).
+        Number of steps (full-batch) or epochs (minibatch) actually run.
     """
+
+    DEFAULTS = {
+            "save_prior": True,
+            "n_iters": 1000,
+            "tol_loss": False,
+            "minibatch": False,
+            "scale_likelihood": True,
+            "batch_size": False,
+            "lr": 1e-1,
+        }
+    REQUIRED = ("opt_key", "init_key")
 
     def __init__(self, model, opt_params):
 
+        allowed = set(self.DEFAULTS) | set(self.REQUIRED)
+        unknown = set(opt_params) - allowed
+        if unknown:
+            raise ValueError(
+                f"Unrecognized opt_params key(s): {sorted(unknown)}. "
+                f"Allowed keys: {sorted(allowed)}"
+            )
+
+        missing = [k for k in self.REQUIRED if k not in opt_params]
+        if missing:
+            raise ValueError(f"opt_params is missing required key(s): {missing}")
+
         self.model = model
-        self.init_params = opt_params["init_params"]
-        self.save_prior = opt_params["save_prior"]
         self.opt_key = opt_params["opt_key"]
         self.init_key = opt_params["init_key"]
-        self.n_iters = opt_params["n_iters"]
-        self.batch_size = opt_params["batch_size"]
-        self.learning_rate = opt_params["lr"]
-        self.tol_loss = opt_params["tol"]
+
+        for key, default in self.DEFAULTS.items():
+            setattr(self, key, opt_params.get(key, default))
+        
+        if self.minibatch and self.batch_size == False:
+            raise ValueError("minibatch=True requires a non-False `batch_size`.")
 
     def batch_time_series(self, x, window_size):
         """
@@ -148,128 +185,215 @@ class Adam:
         x = x[: num_batch * window_size]
         return x.reshape((num_batch, window_size) + x.shape[1:])
 
+    def _make_optimizer_and_state(self, est_params):
+        optimizer = optax.chain(
+            optax.adam(learning_rate=self.lr),
+            optax.scale(-1.0),
+        )
+        opt_state = optimizer.init(est_params)
+        return optimizer, opt_state
+
     def fit(self, Y):
-        """Run batched Adam optimisation and store results on ``self.model``.
+        """Run Adam optimisation (full-batch or minibatch) and store
+        results on ``self.model``.
 
         Parameters
         ----------
         Y : tuple or array
-            Batch of observed data.  The first axis of each element is expected
-            to index individual trials and is vmapped over.
+            Batch of observed data. The first axis of each element is
+            expected to index individual trials/windows.
         """
 
-        if self.batch_size == False:
-            objective = jax.value_and_grad(self.model.log_posterior_params)
+        if self.minibatch and self.batch_size == False:
+            raise ValueError("minibatch=True requires a non-False `batch_size`.")
 
-        else:
-            ys = self.batch_time_series(jnp.asarray(Y[0]), self.batch_size)
-            s = self.batch_time_series(jnp.asarray(Y[1]), self.batch_size)
-            Y = (ys, s)
 
-            mapped_post = jax.vmap(
-                self.model.log_posterior_params, in_axes=(None, 0, None), out_axes=0
-            )
+        # Full-batch mode): every step sees all windows at once via vmap.
+        
+        if not self.minibatch:
 
-            def total_mll(params, y, key):
-                """Sum per-trial log-likelihoods and add the log-prior."""
+            if self.batch_size == False:
+                objective = jax.value_and_grad(self.model.log_posterior_params)
+            else:
+                ys = self.batch_time_series(jnp.asarray(Y[0]), self.batch_size)
+                s = self.batch_time_series(jnp.asarray(Y[1]), self.batch_size)
+                Y = (ys, s)
 
-                temp = mapped_post(params, y, key)
+                mapped_post = jax.vmap(
+                    self.model.log_posterior_params, in_axes=(None, 0, None), out_axes=0
+                )
 
-                return jnp.sum(temp) + self.model.observation.mapping.log_density(params)
+                def total_mll(params, y, key):
+                    temp = mapped_post(params, y, key)
+                    return jnp.sum(temp) + self.model.observation.mapping.log_density(params)
 
-            objective = jax.value_and_grad(total_mll)
+                objective = jax.value_and_grad(total_mll)
 
-        est_params = self.init_params
+            est_params = self.model.random_init(self.init_key)
+            optimizer, opt_state = self._make_optimizer_and_state(est_params)
 
-        optimizer = optax.chain(
-            optax.adam(learning_rate=self.learning_rate),
-            optax.scale(-1.0),
-        )
+            log_density_fn = self.model.observation.mapping.log_density
+            save_prior = self.save_prior
 
-        opt_state = optimizer.init(est_params)
+            @jax.jit
+            def step(est_params, opt_state, Y, key):
+                val, grads = objective(est_params, Y, key)
+                updates, opt_state = optimizer.update(grads, opt_state)
+                est_params = optax.apply_updates(est_params, updates)
 
-        # Single compiled step: objective + optimizer update (+ optional prior),
-        # fused into one XLA dispatch instead of several eager calls per iteration.
+                prior_val = log_density_fn(est_params) if save_prior else None
+                g_norm = optax.global_norm(grads)
+
+                return est_params, opt_state, val, prior_val, g_norm
+
+            objhist = []
+            priorhist = []
+
+            if self.tol_loss == False:
+                for key in tqdm(jax.random.split(self.opt_key, self.n_iters)):
+                    est_params, opt_state, val, prior_val, _ = step(
+                        est_params, opt_state, Y, key
+                    )
+                    if save_prior:
+                        priorhist.append(prior_val)
+                    objhist.append(val)
+            else:
+                g_norms = []
+                rel_loss_hist = []
+
+                i = 0
+                key = self.opt_key
+
+                est_params, opt_state, val, prior_val, g_norm = step(
+                    est_params, opt_state, Y, key
+                )
+                g_normer = g_norm
+
+                objhist.append(val)
+                if save_prior:
+                    priorhist.append(prior_val)
+                g_norms.append(g_norm / g_normer)
+                rel_loss_hist.append(jnp.inf)
+
+                prev_val = val
+                
+                converged = False
+
+                while jnp.logical_and(i < self.n_iters, jnp.logical_not(converged)):
+                    key, subkey = jax.random.split(key)
+
+                    est_params, opt_state, val, prior_val, g_norm = step(
+                        est_params, opt_state, Y, subkey
+                    )
+
+                    if save_prior:
+                        priorhist.append(prior_val)
+                    objhist.append(val)
+
+                    rel_loss_change = jnp.abs(val - prev_val) / (jnp.abs(prev_val) + 1e-8)
+                    rel_loss_hist.append(rel_loss_change)
+                    converged = rel_loss_change < self.tol_loss
+
+                    g_norms.append(g_norm / g_normer)
+
+                    prev_val = val
+                    i = i + 1
+
+                self.model.g_norms_ = g_norms
+                self.model.rel_loss_hist_ = rel_loss_hist
+                self.model.iters_run_ = i
+
+            self.model.params_ = est_params
+            self.model.objhist_ = objhist
+            if self.save_prior:
+                self.model.priorhist_ = priorhist
+
+            return
+
+        # One window per step, shuffled once per epoch, no replacement, full pass = one epoch.
+        
+        ys = self.batch_time_series(jnp.asarray(Y[0]), self.batch_size)
+        s = self.batch_time_series(jnp.asarray(Y[1]), self.batch_size)
+        num_batch = ys.shape[0]
+
+        log_posterior = self.model.log_posterior_params
         log_density_fn = self.model.observation.mapping.log_density
         save_prior = self.save_prior
+        scale = float(num_batch) if self.scale_likelihood else 1.0
+
+        def total_mll_minibatch(params, y, key):
+            """Scaled single-window log-likelihood + log-prior.
+
+            Scaling by `num_batch` makes E[this] over a shuffled epoch equal
+            the true full-data log-likelihood sum, so gradient magnitude and
+            prior/likelihood balance stay comparable to full-batch training.
+            """
+            return scale * log_posterior(params, y, key) + log_density_fn(params)
+
+        objective = jax.value_and_grad(total_mll_minibatch)
+
+        est_params = self.model.random_init(self.init_key)
+        optimizer, opt_state = self._make_optimizer_and_state(est_params)
 
         @jax.jit
-        def step(est_params, opt_state, Y, key):
-            val, grads = objective(est_params, Y, key)
+        def step(est_params, opt_state, y_window, key):
+            val, grads = objective(est_params, y_window, key)
             updates, opt_state = optimizer.update(grads, opt_state)
             est_params = optax.apply_updates(est_params, updates)
 
             prior_val = log_density_fn(est_params) if save_prior else None
-            g_norm = optax.global_norm(grads)  # diagnostics only, not used for stopping
 
-            return est_params, opt_state, val, prior_val, g_norm
+            return est_params, opt_state, val, prior_val
 
         objhist = []
         priorhist = []
+        rel_loss_hist = []
 
-        if self.tol_loss == False:
+        key = self.opt_key
+        epoch = 0
+        prev_epoch_loss = None
+        converged = False
 
-            for key in tqdm(jax.random.split(self.opt_key, self.n_iters)):
+        while epoch < self.n_iters and not converged:
+            key, perm_key = jax.random.split(key)
+            # Pull the shuffle to host once, then index with plain ints so
+            # `step` never retraces (only index *values* change, not shapes).
+            perm = np.asarray(jax.random.permutation(perm_key, num_batch))
 
-                est_params, opt_state, val, prior_val, _ = step(
-                    est_params, opt_state, Y, key
-                )
-
-                if save_prior:
-                    priorhist.append(prior_val)
-                objhist.append(val)
-        else:
-            g_norms = []
-            rel_loss_hist = []
-
-            i = 0
-            key = self.opt_key
-
-            est_params, opt_state, val, prior_val, g_norm = step(
-                est_params, opt_state, Y, key
-            )
-            g_normer = g_norm  # reference grad norm from the first step, diagnostics only
-
-            objhist.append(val)
-            if save_prior:
-                priorhist.append(prior_val)
-            g_norms.append(g_norm / g_normer)
-            rel_loss_hist.append(jnp.inf)  # no previous loss to compare against yet
-
-            prev_val = val
-            converged = False
-
-            while jnp.logical_and(i < self.n_iters, jnp.logical_not(converged)):
+            epoch_losses = []
+            for b in tqdm(perm, desc=f"epoch {epoch}", leave=False):
                 key, subkey = jax.random.split(key)
+                y_window = (ys[b], s[b])
 
-                est_params, opt_state, val, prior_val, g_norm = step(
-                    est_params, opt_state, Y, subkey
+                est_params, opt_state, val, prior_val = step(
+                    est_params, opt_state, y_window, subkey
                 )
 
+                objhist.append(val)
+                epoch_losses.append(val)
                 if save_prior:
                     priorhist.append(prior_val)
-                objhist.append(val)
 
-                # relative loss change -- sole stopping criterion
-                rel_loss_change = jnp.abs(val - prev_val) / (jnp.abs(prev_val) + 1e-8)
+            mean_epoch_loss = jnp.mean(jnp.stack(epoch_losses))
+
+            if self.tol_loss != False and prev_epoch_loss is not None:
+                rel_loss_change = jnp.abs(mean_epoch_loss - prev_epoch_loss) / (
+                    jnp.abs(prev_epoch_loss) + 1e-8
+                )
                 rel_loss_hist.append(rel_loss_change)
                 converged = rel_loss_change < self.tol_loss
+            else:
+                rel_loss_hist.append(jnp.inf)
 
-                g_norms.append(g_norm / g_normer)  # diagnostics only
-
-                prev_val = val
-                i = i + 1
-
-            self.model.g_norms_ = g_norms
-            self.model.rel_loss_hist_ = rel_loss_hist
-            self.model.iters_run_ = i
+            prev_epoch_loss = mean_epoch_loss
+            epoch += 1
 
         self.model.params_ = est_params
         self.model.objhist_ = objhist
-
+        self.model.rel_loss_hist_ = rel_loss_hist
+        self.model.iters_run_ = epoch
         if self.save_prior:
             self.model.priorhist_ = priorhist
-
 
 class SGD:
     """SGD with Nesterov momentum and a cosine warm-up learning-rate schedule.
