@@ -53,6 +53,7 @@ import jax
 import jax.numpy as jnp
 from jax import jit
 from jax.scipy.special import logsumexp
+from jax.nn import softplus
 
 import inspect
 from functools import partial
