@@ -214,6 +214,11 @@ class AbstractGPLVM:
 
         return X[max_inds]
 
+    def random_init(self, key):
+        return jax.random.normal(
+                    key, shape=(self.params_per_neuron, self.num_neurons)
+                )
+
     def fit(self, Y, method, opt_params, **kwargs):
         
         _fitting_methods = \
