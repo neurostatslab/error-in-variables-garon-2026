@@ -109,7 +109,7 @@ def plot_objhist_sim(model, ys, key, show_prior = True):
     axes[0].set(xlabel="Iteration", ylabel="Marg Log Likelihood")
     axes[0].plot(model.objhist_)
 
-    axes[0].axhline(jnp.sum(model.marginal_log_likelihood_params(model.true_params, ys, TEST_KEY)), color = "k", linestyle="--")
+    axes[0].axhline(jnp.sum(model.marginal_log_likelihood_params(model.true_params, ys, key)), color = "k", linestyle="--")
     
     plt.show()
     return axes
