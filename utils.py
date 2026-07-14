@@ -100,6 +100,20 @@ def plot_objhist(model, show_prior = True):
     plt.show()
     return axes
 
+def plot_objhist_sim(model, ys, key, show_prior = True):
+    fig, axes = plt.subplots(1, 2, figsize=(15,5))
+    if show_prior:
+        axes[1].plot(model.priorhist_)
+        axes[1].set(xlabel="Iteration", ylabel="Prior Log Likelihood")
+    
+    axes[0].set(xlabel="Iteration", ylabel="Marg Log Likelihood")
+    axes[0].plot(model.objhist_)
+
+    axes[0].axhline(jnp.sum(model.marginal_log_likelihood_params(model.true_params, ys, TEST_KEY)), color = "k", linestyle="--")
+    
+    plt.show()
+    return axes
+
 def plot_3d_neurons(model, true_weights, grid_reso = 100, neurs = [0,1,2]):
     #TODO mame general, this will break with compound
     eiv_flag = True if isinstance(model.observation.mapping, mappings.EIVMapping) else False
