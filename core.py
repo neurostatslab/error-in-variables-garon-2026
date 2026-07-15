@@ -642,7 +642,7 @@ class DynamicEIV(DynamicGPLVM):
                     num_timesteps=num_steps 
                     )
         
-        ys = tuple([jnp.squeeze(ys[0]), ys[1][:,:,0]])
+        ys = tuple([jnp.squeeze(ys[0]), ys[1][:,0,:]])
         xs_true = jnp.squeeze(xs_true)
 
         return xs_true, ys
