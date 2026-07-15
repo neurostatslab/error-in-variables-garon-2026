@@ -231,6 +231,7 @@ class Adam:
 
                 objective = jax.value_and_grad(total_mll)
             if self.init_params is None:
+                print("RANDOM INIT")
                 est_params = self.model.random_init(self.init_key)
             else: 
                 est_params = self.init_params
@@ -337,6 +338,7 @@ class Adam:
         objective = jax.value_and_grad(total_mll_minibatch)
 
         if self.init_params is None:
+                print("RANDOM INIT")
                 est_params = self.model.random_init(self.init_key)
         else: 
             est_params = self.init_params
