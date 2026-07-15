@@ -230,10 +230,10 @@ class Adam:
                     return jnp.sum(temp) + self.model.observation.mapping.log_density(params)
 
                 objective = jax.value_and_grad(total_mll)
-            if not opt_params["init_params"]:
+            if not self.init_params:
                 est_params = self.model.random_init(self.init_key)
             else: 
-                est_params = opt_params["init_params"]
+                est_params = self.init_params
             optimizer, opt_state = self._make_optimizer_and_state(est_params)
 
             log_density_fn = self.model.observation.mapping.log_density
