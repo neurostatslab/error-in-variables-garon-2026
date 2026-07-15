@@ -592,10 +592,10 @@ class DynamicEIV(DynamicGPLVM):
             ),
         )
 
-        print(self.basis_params)
-        print(proposal)
-        print(transition)
-        print(observation)
+        print("self.basis_params", dir(self.basis_params))
+        print("proposal",dir(proposal))
+        print("transition",dir(transition))
+        print("observation",dir(observation))
          
         super().__init__(transition=transition,
                         observation=observation, 
