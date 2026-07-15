@@ -600,7 +600,7 @@ class DynamicEIV(DynamicGPLVM):
         print("proposal")
         for key, value in proposal.__dict__.items():
             print(f"Key: {key}, Value: {value}")
-         \
+         
        
         print("transition")
         for key, value in transition.__dict__.items():
