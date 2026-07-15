@@ -230,7 +230,7 @@ class Adam:
                     return jnp.sum(temp) + self.model.observation.mapping.log_density(params)
 
                 objective = jax.value_and_grad(total_mll)
-            if not self.init_params:
+            if self.init_params is None:
                 est_params = self.model.random_init(self.init_key)
             else: 
                 est_params = self.init_params
@@ -336,10 +336,10 @@ class Adam:
 
         objective = jax.value_and_grad(total_mll_minibatch)
 
-        if not opt_params["init_params"]:
+        if self.init_params is None:
                 est_params = self.model.random_init(self.init_key)
         else: 
-            est_params = opt_params["init_params"]
+            est_params = self.init_params
         optimizer, opt_state = self._make_optimizer_and_state(est_params)
 
         @jax.jit
@@ -477,7 +477,7 @@ class SGD:
             optax.scale(-1.0)
         )
 
-        if not self.init_params:
+        if self.init_params is None:
                 est_params = self.model.random_init(self.init_key)
         else: 
             est_params = self.init_params
@@ -567,7 +567,7 @@ class LBFGS:
 
         # Initialize optimization method
         solver = jaxopt.LBFGS(fun=objective)
-        if not self.init_params:
+        if self.init_params is None:
                 est_params = self.model.random_init(self.init_key)
         else: 
             est_params = self.init_params
@@ -845,10 +845,10 @@ class ULA:
         """
 
         # Initialize optimization method
-        if not opt_params["init_params"]:
+        if self.init_params is None:
             est_params = self.model.random_init(self.init_key)
         else: 
-            est_params = opt_params["init_params"]
+            est_params = self.init_params
         velocity = jnp.zeros((self.n_chains, self.params_per_neuron, self.num_neurons))
         
         batched_update = jax.jit(
