@@ -5,12 +5,12 @@ import jaxopt
 import smc
 import time
 import jax.numpy as jnp
+import numpy as np
 from tqdm import trange, tqdm
 from jax.scipy.special import logsumexp
 from functools import partial
 from jax import jit
 from distrax import MultivariateNormalDiag
-import numpy as np
 
 """
 inference.py
@@ -66,7 +66,7 @@ To - Do
 
 class Adam:
     """Adam optimizer for MAP estimation, with either full-batch or
-     minibatch over a fixed set of trial windows.
+     minibatch a fixed set of trial windows.
 
     ---> Primarily used for particle filter, smoothing over fixed windows of time
          smaller than the full recording duration
@@ -133,6 +133,7 @@ class Adam:
     """
 
     DEFAULTS = {
+            "init_params":None,
             "save_prior": True,
             "n_iters": 1000,
             "tol_loss": False,
@@ -229,8 +230,10 @@ class Adam:
                     return jnp.sum(temp) + self.model.observation.mapping.log_density(params)
 
                 objective = jax.value_and_grad(total_mll)
-
-            est_params = self.model.random_init(self.init_key)
+            if not opt_params["init_params"]:
+                est_params = self.model.random_init(self.init_key)
+            else: 
+                est_params = opt_params["init_params"]
             optimizer, opt_state = self._make_optimizer_and_state(est_params)
 
             log_density_fn = self.model.observation.mapping.log_density
@@ -333,7 +336,10 @@ class Adam:
 
         objective = jax.value_and_grad(total_mll_minibatch)
 
-        est_params = self.model.random_init(self.init_key)
+        if not opt_params["init_params"]:
+                est_params = self.model.random_init(self.init_key)
+        else: 
+            est_params = opt_params["init_params"]
         optimizer, opt_state = self._make_optimizer_and_state(est_params)
 
         @jax.jit
@@ -396,6 +402,7 @@ class Adam:
         if self.save_prior:
             self.model.priorhist_ = priorhist
 
+
 class SGD:
     """SGD with Nesterov momentum and a cosine warm-up learning-rate schedule.
  
@@ -411,8 +418,6 @@ class SGD:
     opt_params : dict
         Configuration dictionary with the following keys:
  
-        init_params : pytree
-            Initial parameter values.
         save_prior : bool
             If ``True``, record ``log_density(params)`` at every iteration.
         opt_key : jax.random.PRNGKey
@@ -472,7 +477,10 @@ class SGD:
             optax.scale(-1.0)
         )
 
-        est_params = self.init_params
+        if not self.init_params:
+                est_params = self.model.random_init(self.init_key)
+        else: 
+            est_params = self.init_params
 
         opt_state = optimizer.init(est_params)
 
@@ -559,7 +567,11 @@ class LBFGS:
 
         # Initialize optimization method
         solver = jaxopt.LBFGS(fun=objective)
-        est_params = self.init_params
+        if not self.init_params:
+                est_params = self.model.random_init(self.init_key)
+        else: 
+            est_params = self.init_params
+        
         state = solver.init_state(
             est_params, Y, self.init_key
         )
@@ -833,7 +845,10 @@ class ULA:
         """
 
         # Initialize optimization method
-        est_params = self.init_params
+        if not opt_params["init_params"]:
+            est_params = self.model.random_init(self.init_key)
+        else: 
+            est_params = opt_params["init_params"]
         velocity = jnp.zeros((self.n_chains, self.params_per_neuron, self.num_neurons))
         
         batched_update = jax.jit(
@@ -847,7 +862,9 @@ class ULA:
         saved_grads = []
         saved_vals = []
 
-        # Phase 1: MCMC                                                      
+        # ------------------------------------------------------------------ #
+        # Phase 1: MCMC                                                       #
+        # ------------------------------------------------------------------ #
         for i in trange(self.n_iters):
 
             keys = jax.random.split(jax.random.PRNGKey(i), num=self.n_chains)
@@ -876,8 +893,9 @@ class ULA:
             self.model.log_posterior_params, in_axes=(0, None, None)
         ))
 
-        
-        # Phase 2: Bandwidth selection via ELBO maximisation                  
+        # ------------------------------------------------------------------ #
+        # Phase 2: Bandwidth selection via ELBO maximisation                  #
+        # ------------------------------------------------------------------ #
         hs = jnp.logspace(kde_bandwidth[0], kde_bandwidth[1], kde_reso)
         log_Z_ests = [[] for _ in range(n_chains_keep)]
         elbos = [[] for _ in range(n_chains_keep)]
@@ -907,7 +925,10 @@ class ULA:
             self.model.best_h_ * jnp.ones(self.params_per_neuron * self.num_neurons)
         )
 
-        # Phase 3: Final MIS estimation                                       
+        
+        # ------------------------------------------------------------------ #
+        # Phase 3: Final MIS estimation                                       #
+        # ------------------------------------------------------------------ #
         best_lgZs = [[] for _ in range(n_chains_keep)]
 
         key = self.is_key
@@ -924,3 +945,4 @@ class ULA:
 
         self.model.indep_is_w_ = indep_is_w
         self.model.best_lgZs_ = jnp.array(best_lgZs)
+
