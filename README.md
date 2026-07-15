@@ -126,8 +126,15 @@ utils.plot_latent_recon_real(model, ys, grid_reso = 100, window = 500, grid_max 
 ```
 
 ## Hyperparameters
+
+## Model
+### Behavioral Observation Model
+![EIV kappa schematic](figures/kappa_schematic.png)
+
+
+### Tuning Observation Model
+![Tuning prior schematic](figures/tuning_prior.png)
 ### Optimization
-### Model
 
 ## Structure
 ```├── __init__.py         # Top-level exports: SIMPL, load_datafile, ...
