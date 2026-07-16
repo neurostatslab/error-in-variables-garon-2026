@@ -277,6 +277,38 @@ def plot_real_tuning(model, true_tuning, ys, grid_max = 1, grid_reso=100, ula_fl
     fig.tight_layout()
     return axes
 
+def plot_real_tuning_2d(model, tuning_curves,nan_mask = None, num_plot = 100, grid_reso = 20,grid_max=0.8):
+    if nan_mask is None:
+        mask = np.ones(tuning_curves[:,0,:].shape)
+    x_grid = utils.make_xgrid(2, grid_reso, grid_max = grid_max)
+    est_tunings = model.observation.mapping(model.params_, x_grid)[0]
+    
+    
+    n_cols = 4
+    n_rows = num_plot//n_cols + num_plot%n_cols
+    fig, axes = plt.subplots(n_rows, n_cols*2, figsize=(n_cols*4, n_rows*2))
+    
+    n_p_c = 0
+    col = 0
+    for i in range(num_plot):
+      tuning_curve = tuning_curves[:,i,:]
+      mask = np.ones(tuning_curve.shape)
+      mask[nan_inds] = np.nan
+      mask = mask.reshape(tuning_curve.shape)
+    
+      axes[n_p_c,0+(col*2)].imshow(tuning_curve*mask)
+      axes[n_p_c,1+(col*2)].imshow(est_tunings[:,i,:].T*mask, vmin = jnp.nanmin(tuning_curve), vmax = jnp.nanmax(tuning_curve))
+      axes[n_p_c,0+(col*2)].set_title("Neuron #: "+str(i))
+      axes[n_p_c,1+(col*2)].set_title("EIV Est")
+    
+      n_p_c = n_p_c + 1
+    
+      if n_p_c == n_rows:
+          col = col + 1
+          n_p_c = 0
+      plt.tight_layout()
+    return axes
+
 
 def jax_to_numpy_dict(d):
     """Converts all JAX arrays in a dictionary to NumPy arrays.
