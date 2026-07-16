@@ -21,11 +21,22 @@ Model classes
                         Monte-Carlo marginalisation over a fixed latent-space
                         sampler (e.g. Sobol/Roberts quasi-random points).
 - ``GPGLM``           – degenerate case where the latent variable ``x`` is
-                        directly observed (a GLM): no marginalisation needed.
+                        directly observed (a GLM): no marginalisation over
+                        latent needed.
 - ``DynamicGPLVM``    – sequential (state-space) latent-variable model using
                         Sequential Monte Carlo (particle filtering) to estimate
                         the marginal likelihood through time.
- 
+  
+Model classes
+-------------
+- ``EIV``             - Wrapper for static error-in-variables model, simplifies layer 
+                        construction, only requires 3 args (Kappa, tuning output scale, 
+                        tuning length scale). Defaults Poisson noise and VonMises 
+                        distribution over errors.
+- ``DynamicEIV``      - Wrapper for dynamic error-in-variables model, requires an additional
+                        parameter to govern smoothness of behavioral trajectories. Transitional
+                        and proposal noise also default to VonMises. 
+
 Supporting classes
 -------------------
 - ``Layer``           – a probabilistic mapping ``f(x) + noise``: combines a
@@ -224,8 +235,7 @@ class AbstractGPLVM:
         _fitting_methods = \
             dict(adam=inference.Adam,
                  lbfgs=inference.LBFGS,
-                 sgd=inference.SGD,
-                 ula = inference.ULA
+                 sgd=inference.SGD
                  )
 
         if method not in _fitting_methods:
