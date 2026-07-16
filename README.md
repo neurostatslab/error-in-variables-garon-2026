@@ -41,38 +41,25 @@ pip install -r requirements.txt
 ```
 
 ## Quickstart
-
-Construct model
+There are three parameters you need to select for the standard, static EIV model which are further outlined in the hypterpatameters section below: 
+- Length scale
+- Output variance
+- Representational Fidelity
+  
+To set up the model
 ```python
-# Model Hyperparams
-
-# Representational Fidelity Parameter
-kappa = 5.
-
-# Tuning Curve Prior
-basis_params = {
-                "max_freq": 30,
-                "num_dims": num_dims,
-                "out_scale":10.,
-                "len_scale":.1,
-                "bias_mean": 0,
-                "bias_std": 0,
-                "num_neurons":num_neurons,
-                "tol":1e-3,
-                "nonlinearity":lambda x: softplus(x),
-                }
-
+# Generative Hyperparams
+num_neurons = 100
+num_dims = 1
+num_steps = 3000
 
 # Construct Model
-model = GPLVM(
-    observation=Layer(
-            mapping=mappings.EIVMapping([mappings.WeightedFourierBasisMapping(basis_params),
-                                            mappings.IdentityMapping()]),
-            noise=noise_models.EIVNoiseModel([noise_models.Poisson(),noise_models.VonMisesNormed(kappa)])
-            ),
-    sampler = Roberts(num_dims, mc_scale=1))
+model = EIV(len_scale = .2,
+            out_scale = 50.,
+            kappa = 7.,
+            num_dims=num_dims,
+            num_neurons=num_neurons)
 
-params_per_neuron = model.observation.mapping.mappings[0].params_per_neuron
 
 ```
 
@@ -80,41 +67,24 @@ Simulate data, or plug in your own - model is fit to `ys`, a tuple of neural obs
 
 
 ```python
-# Sample true parameters of model
-true_weights = jax.random.normal(
-                        GEN_KEY, shape=(params_per_neuron, num_neurons)
-                    )
 
-x_grid = utils.make_xgrid(1, 100, 1.)
-true_tunings = model.observation.mapping(true_weights, x_grid)[0].T
-
-
+# Simulate Data
 xs_true, ys = model.simulate(
-    key=GEN_KEY,
-    params=true_weights,
-    num_observations=num_steps
+    num_steps=num_steps
 )
 
-#Visualize Dataset
-utils.plot_simulated_data_1D(xs_true, true_weights, ys, model);
+# Visualize Data
+utils.plot_simulated_data_1D(xs_true, model.true_params, ys, model);
 ```
 
 Fit Model 
 ```python
-est_params = jax.random.normal(
-                        INIT_KEY,
-                        shape=(params_per_neuron, num_neurons)
-                    )
-
+# Adjust run params, select keys for initialization & reproducibility
 opt_params = {
-    "init_params":est_params,
-    "save_prior":True,
-    "opt_key":OPT_KEY,
-    "init_key":INIT_KEY,
-    "n_iters":  200
-}
-
-model.fit(ys, "lbfgs", opt_params)
+        "opt_key": OPT_KEY,
+        "init_key": INIT_KEY,
+    }
+model.fit(ys, "adam", opt_params)
 ```
 
 Plot results
@@ -134,18 +104,23 @@ utils.plot_latent_recon_real(model, ys, grid_reso = 100, window = 500, grid_max 
 
 ### Tuning Observation Model
 ![Tuning prior schematic](figures/tuning_prior.png)
+
+### Dynamic Model
+![Comparison of proposal concentrations](figures/prop_concentration_fig.png)
+
 ### Optimization
 
 ## Structure
-```├── __init__.py         # Top-level exports: SIMPL, load_datafile, ...
-├── core.py             # Abstract model class, fit methods, layer and proposal structure
-├── inference.py        # Implemented inference methods and batching
-├── loader.py           # Data loader for example datasets
-├── mappings.py         # Mappings - fourier for GP prior
-├── mc_samplers.py      # Samplers for marginalizing latent space
-├── noise_models.py     # Noise models for behavioral observations and spiking activity
-├── smc.py              # Particle filter for modeling dependencies over time points
-└── utils.py            # Plotting and helper functions
+```
+  ├── __init__.py      
+  ├── core.py             # Abstract model class, fit methods, layer and proposal structure
+  ├── inference.py        # Implemented inference methods and batching
+  ├── loader.py           # Data loader for example datasets
+  ├── mappings.py         # Mappings - fourier for GP prior
+  ├── mc_samplers.py      # Samplers for marginalizing latent space
+  ├── noise_models.py     # Noise models for behavioral observations and spiking activity
+  ├── smc.py              # Particle filter for modeling dependencies over time points
+  └── utils.py            # Plotting and helper functions
 ```
 ## Citation
 
