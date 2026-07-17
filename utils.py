@@ -293,7 +293,7 @@ def plot_real_tuning_2d(model, tuning_curves,nan_mask = None, num_plot = 100, gr
     for i in range(num_plot):
       tuning_curve = tuning_curves[:,i,:]
       mask = np.ones(tuning_curve.shape)
-      mask[nan_inds] = np.nan
+      mask[nan_mask] = np.nan
       mask = mask.reshape(tuning_curve.shape)
     
       axes[n_p_c,0+(col*2)].imshow(tuning_curve*mask)
