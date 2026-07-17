@@ -4,34 +4,47 @@
 > Isabel Garon, Stephen Keeley, Alex H. Williams
 > bioRxiv 2026.04.22.720005; doi: [10.64898/2026.04.22.720005](https://doi.org/10.64898/2026.04.22.720005)
 
-JAX implementation of error-in-variables (EIV) Gaussian Process Latent 
-Variable Model for inferring neural tuning curves when the behavioral observations are
-noisy or uncertain.
+A JAX implementation of Error-in-Variables (EIV) Regression, a probabilistic framework for estimating neural tuning curves and latent population representations when behavioral or sensory measurements are imperfect proxies for the variables encoded by neural activity.
 
-The package supports both static and dynamic latent variable
-models, with several inference routines: MAP estimation of tuning via Adam or L-BFGS,
-and an unadjusted Langevin sampler (ULA) for full posteriors over the latent manifold.
+Unlike conventional encoding models, which assume behavioral observations are known exactly, EIV regression explicitly models uncertainty in the behavioral measurements. The method continuously interpolates between supervised encoding models and unsupervised latent variable models through a single interpretable hyperparameter, κ. The full pipeline yields:
 
-## Overview
+- neuron-specific tuning curves
+- latent neural representations
+- `kappa` a description of representational fidelity between neural activity and behavior
 
-Standard GPLVMs assume the latent variable `x` is a free parameter to be
-inferred without any structural noise assumption on how it relates to
-observations. This repo implements an error-in-variables extension,
-where the mapping from latent `x` to observed neural activity explicitly
-accounts for uncertainty/noise in `x` itself, in addition to observation
-noise in the spiking response. Two versions of the model are included:
+# Overview
 
-**GPLVM** — static latent variable model, time points are independent,
-latents are marginalized via a quasi-Monte Carlo sampler over a fixed domain.
+Suppose we record simultaneously
 
-**DynamicGPLVM** — latents evolve over time under a transition model, 
-with the marginal likelihood estimated via particle filtering / Sequential
-Monte Carlo.
+- neural activity **Y**
+- behavioral observations **S**
+
+Traditional tuning curve estimation assumes the observed behavior is noise-free, however internal neural representations may systematically deviate from measured behavior because of sensory noise, behavioral measurement error, or internal computation.
+
+EIV regression introduces an unobserved latent representation
 
 
-Observation models (Layer) are composed of a mapping (e.g. a
-weighted Fourier basis or linear readout from latent space to neural
-activity) and a noise model (observation noise distribution).
+$$
+S = X + \epsilon
+$$
+
+The latent variable **X** is constrained jointly by the neural population activity and the observed behavior. The strength of this coupling is governed by the **representational fidelity parameter** κ.
+
+As
+
+- **κ → ∞:** the model reduces to a conventional supervised encoding model (GLM with nonlinear basis functions).
+- **κ → 0:** behavioral observations become uninformative and the model becomes an unsupervised Gaussian Process Latent Variable Model (GPLVM).
+- **Intermediate κ:** neural activity and behavioral observations jointly constrain the latent representation.
+
+This provides a statistically principled framework for quantifying when neural representations diverge from externally measured variables.
+
+There are two models included in this implementation:
+
+**EIV** — An efficient, static implementation of the latent-variable model, where time points are treated independently. Latent variables are marginalized using quasi-Monte Carlo integration.
+
+**DynamicEIV** — A dynamic extension that incorporates temporal structure through Sequential Monte Carlo (particle filtering).
+Useful when, firing rates are low, time bins are small, and latent trajectories evolve smoothly over time.
+
 
 ## Installation
 ```bash
@@ -41,11 +54,7 @@ pip install -r requirements.txt
 ```
 
 ## Quickstart
-There are three parameters you need to select for the standard, static EIV model which are further outlined in the hypterpatameters section below: 
-- Length scale
-- Output variance
-- Representational Fidelity
-  
+
 To set up the model
 ```python
 # Generative Hyperparams
@@ -95,19 +104,61 @@ utils.plot_real_tuning(model, true_tunings)
 utils.plot_latent_recon_real(model, ys, grid_reso = 100, window = 500, grid_max = 1)
 ```
 
-## Hyperparameters
+# Choosing Hyperparameters
 
-## Model
-### Behavioral Observation Model
-![EIV kappa schematic](figures/kappa_schematic.png)
+## Representational Fidelity (`kappa`)
 
+The central hyperparameter of the model is the representational fidelity parameter **κ**, which determines how strongly the latent representation is coupled to the observed behavior.
 
-### Tuning Observation Model
-![Tuning prior schematic](figures/tuning_prior.png)
+- Large κ → supervised regression
+- Small κ → unsupervised manifold learning
+- Intermediate κ → semi-supervised latent variable model
 
-### Dynamic Model
-![Comparison of proposal concentrations](figures/prop_concentration_fig.png)
+In practice, κ should be selected by maximizing the cross-validated marginal likelihood, as described in the accompanying paper.
 
+<p align="center">
+<img src="figures/kappa_schematic.png" width="650">
+</p>
+
+## Gaussian Process Prior
+
+Tuning curves are represented using a **weight-space Gaussian process approximation** based on a truncated Fourier basis.
+
+Two hyperparameters govern this prior.
+
+### `len_scale`
+
+Controls the smoothness of tuning curves.
+
+Smaller values permit more rapidly varying tuning functions.
+
+### `out_scale`
+
+Controls the prior variance (response magnitude).
+
+<p align="center">
+<img src="figures/tuning_prior.png" width="650">
+</p>
+
+---
+
+## Dynamic Model
+
+`DynamicEIV` introduces one additional hyperparameter,
+
+```python
+proposal_concentration
+```
+
+which controls how strongly neighboring latent states are coupled during particle filtering.
+
+Higher values produce smoother latent trajectories, while lower values allow greater flexibility.
+
+<p align="center">
+<img src="figures/prop_concentration_fig.png" width="650">
+</p>
+
+---
 ### Optimization
 
 ## Structure
