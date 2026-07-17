@@ -1,7 +1,6 @@
 from mc_samplers import Roberts, Sobol
 import jax
 import optax
-import jaxopt
 import smc
 import time
 import jax.numpy as jnp
@@ -503,95 +502,3 @@ class SGD:
         
         if self.save_prior:
             self.model.priorhist_ = priorhist
-
-
-
-class LBFGS:
-    """L-BFGS quasi-Newton optimizer via ``jaxopt``.
- 
-    Wraps ``jaxopt.LBFGS`` for second-order MAP estimation.  Compared to
-    first-order methods, L-BFGS typically converges in far fewer iterations
-    but requires more memory per step and may be less robust to noisy
-    stochastic objectives.
- 
-    Parameters
-    ----------
-    model : object
-        Model instance exposing ``log_posterior_params(params, Y, key) -> scalar``.
-    opt_params : dict
-        Configuration dictionary with the following keys:
- 
-        init_params : pytree
-            Initial parameter values.
-        save_prior : bool
-            If ``True``, record ``log_density(params)`` at every iteration.
-        opt_key : jax.random.PRNGKey
-            Key for per-iteration random keys.
-        init_key : jax.random.PRNGKey
-            Key used to initialise the solver state.
-        n_iters : int
-            Number of L-BFGS update steps.
- 
-    Attributes
-    ----------
-    model.params_ : pytree
-        Estimated parameters after optimisation.
-    model.objhist_ : list of float
-        Negative log-posterior (solver value) at every iteration
-        (only populated when ``save_prior=True``).
-    model.priorhist_ : list of float
-        Log-prior at every iteration (only if ``save_prior=True``).
-    """
-
-    def __init__(self, model, opt_params):
-
-        self.model = model
-        self.init_params = opt_params["init_params"]
-        self.save_prior = opt_params["save_prior"]
-        self.opt_key = opt_params["opt_key"]
-        self.init_key = opt_params["init_key"]
-        self.n_iters = opt_params["n_iters"]
-
-
-    def fit(self, Y):
-        """Run L-BFGS optimisation and store results on ``self.model``.
- 
-        Parameters
-        ----------
-        Y : array-like
-            Observed data passed to ``model.log_posterior_params``.
-        """
-
-        def objective(*args):
-            """Negate the log-posterior for minimisation."""
-            return -1 * self.model.log_posterior_params(*args)
-
-        # Initialize optimization method
-        solver = jaxopt.LBFGS(fun=objective)
-        if self.init_params is None:
-                est_params = self.model.random_init(self.init_key)
-        else: 
-            est_params = self.init_params
-        
-        state = solver.init_state(
-            est_params, Y, self.init_key
-        )
-
-        objhist = []
-        priorhist = []
-
-        for i, key in enumerate(tqdm(jax.random.split(self.opt_key, self.n_iters))):
-            
-            est_params, state = solver.update(
-                est_params, state, Y, key
-            )
-            if self.save_prior:
-                priorhist.append(self.model.observation.mapping.log_density(est_params))
-                objhist.append(state.value)
-
-        self.model.params_ = est_params
-        self.model.objhist_ = objhist
-        
-        if self.save_prior:
-            self.model.priorhist_ = priorhist
- 
