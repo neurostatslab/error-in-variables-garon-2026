@@ -234,7 +234,6 @@ class AbstractGPLVM:
         
         _fitting_methods = \
             dict(adam=inference.Adam,
-                 lbfgs=inference.LBFGS,
                  sgd=inference.SGD
                  )
 
