@@ -280,7 +280,7 @@ def plot_real_tuning(model, true_tuning, ys, grid_max = 1, grid_reso=100, ula_fl
 def plot_real_tuning_2d(model, tuning_curves,nan_mask = None, num_plot = 100, grid_reso = 20,grid_max=0.8):
     if nan_mask is None:
         mask = np.ones(tuning_curves[:,0,:].shape)
-    x_grid = utils.make_xgrid(2, grid_reso, grid_max = grid_max)
+    x_grid = make_xgrid(2, grid_reso, grid_max = grid_max)
     est_tunings = model.observation.mapping(model.params_, x_grid)[0]
     
     
