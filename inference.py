@@ -29,14 +29,7 @@ Point-estimate optimizers
 -------------------------
 - ``Adam``                  – single-trial Adam, supports batching and stopping conditions
 - ``SGD``                   – SGD with Nesterov momentum and cosine-warmup schedule
-- ``LBFGS``                 – L-BFGS via jaxopt
- 
-Sampling / variational methods
--------------------------------
-- ``ULA``                   – Underdamped Langevin Algorithm with Multiple
-                              Importance Sampling (MIS) for marginal-likelihood
-                              estimation
- 
+
 Dependencies
 ------------
 - JAX / JAXopt
