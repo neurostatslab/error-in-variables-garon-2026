@@ -9,7 +9,6 @@ from tqdm import trange, tqdm
 from jax.scipy.special import logsumexp
 from functools import partial
 from jax import jit
-from distrax import MultivariateNormalDiag
 
 """
 inference.py
