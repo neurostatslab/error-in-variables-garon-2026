@@ -24,9 +24,9 @@ def plot_simulated_data_1D(xs_true, true_weights, ys, model, grid_reso = 100, n_
     fig, axes = plt.subplots(1, 4, figsize=(15,5))
 
     axes[0].set_title("Latent")
-    axes[0].plot(xs_true[:n_timesteps,:])
+    axes[0].plot(xs_true[:n_timesteps])
     if eiv_flag  & (len(ys)>1):
-        axes[0].plot(ys[1][:n_timesteps,:])
+        axes[0].plot(ys[1][:n_timesteps])
     axes[0].set_xlabel("Time")
 
     axes[1].set_title("Observations")
