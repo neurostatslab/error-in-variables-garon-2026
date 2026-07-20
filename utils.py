@@ -18,22 +18,22 @@ def make_xgrid(num_latent_dims, num_grid_pts, grid_max = 1):
     X = jnp.moveaxis(X, 0, -1)
     return X
 
-def plot_simulated_data_1D(xs_true, true_weights, ys, model, grid_reso = 100, n_neurs = 5, n_timesteps=300, grid_max = 1):
+def plot_simulated_data_1D(xs_true, true_weights, ys, model, grid_reso = 100, n_neurs = 5, n_timesteps=500, grid_max = 1):
     
     eiv_flag = True if isinstance(model.observation.mapping, mappings.EIVMapping) else False
     fig, axes = plt.subplots(1, 4, figsize=(15,5))
 
     axes[0].set_title("Latent")
-    axes[0].plot(xs_true)
+    axes[0].plot(xs_true[:n_timesteps,:])
     if eiv_flag  & (len(ys)>1):
-        axes[0].plot(ys[1])
+        axes[0].plot(ys[1][:n_timesteps,:)
     axes[0].set_xlabel("Time")
 
     axes[1].set_title("Observations")
     if eiv_flag:
-        axes[1].plot(ys[0][:,:n_neurs])
+        axes[1].plot(ys[0][:n_timesteps,:n_neurs])
     else:
-        axes[1].plot(ys[:,:n_neurs])
+        axes[1].plot(ys[:n_timesteps,:n_neurs])
     axes[1].set_xlabel("Time")
 
     x_grid = jnp.linspace(0, grid_max, grid_reso)[:, None]
@@ -43,7 +43,7 @@ def plot_simulated_data_1D(xs_true, true_weights, ys, model, grid_reso = 100, n_
         true_tunings = model.observation.mapping(true_weights, x_grid)
 
     axes[2].set_title("Tuning Curves")
-    axes[2].plot(x_grid, true_tunings)
+    axes[2].plot(x_grid, true_tunings[:,:n_neurs])
     axes[2].set_xlabel("Stimulus")
 
     axes[3].set_title("Noisy Samples")
@@ -63,16 +63,16 @@ def plot_simulated_data_2D(xs_true, true_weights, ys, model, grid_reso = 100, n_
     fig, axes = plt.subplots(1, 4, figsize=(15,5))
 
     axes[0].set_title("Latent")
-    axes[0].plot(xs_true, color='r', label="True")
+    axes[0].plot(xs_true[:n_timesteps,:], color='r', label="True")
     if eiv_flag  & (len(ys)>1):
-        axes[0].plot(ys[1], color='k', label="Measured")
+        axes[0].plot(ys[1][:n_timesteps,:], color='k', label="Measured")
     axes[0].set_xlabel("Time")
 
     axes[1].set_title("Observations")
     if eiv_flag:
-        axes[1].plot(ys[0][:,:n_neurs])
+        axes[1].plot(ys[0][:n_timesteps,:n_neurs])
     else:
-        axes[1].plot(ys[:,:n_neurs])
+        axes[1].plot(ys[:n_timesteps,:n_neurs])
     axes[1].set_xlabel("Time")
 
     x_grid = make_xgrid(2, 100, grid_max = grid_max)
