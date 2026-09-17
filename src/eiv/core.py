@@ -523,7 +523,7 @@ class EIV(GPLVM):
     
 
 
-    def simulate(self, num_steps, true_params=None, key=None, autocorrelated = False):
+    def simulate(self, num_steps, true_params=None, key=None, autocorrelated = False, x_velocity = .5):
 
         if key is None:
             self._sim_key, key = jax.random.split(self._sim_key)
@@ -539,7 +539,7 @@ class EIV(GPLVM):
             return super().simulate(key, true_params, num_steps)
         else:
            xs_true = jnp.array(
-               (np.cumsum(np.random.randn(num_steps) * x_velocity)) % 1
+               (jnp.cumsum(jnp.random.normal(kay, shape=num_steps) * x_velocity)) % 1
            )
            S = self.observation.noise.noise_models[0].sample(key, xs_true)
            F = self.observation.mapping.mappings[0](true_params,  xs_true[:, None]).T
