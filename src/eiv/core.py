@@ -539,7 +539,7 @@ class EIV(GPLVM):
             return super().simulate(key, true_params, num_steps)
         else:
            xs_true = jnp.array(
-               (jnp.cumsum(jax.random.normal(kay, shape=num_steps) * x_velocity)) % 1
+               (jnp.cumsum(jax.random.normal(key, shape=num_steps) * x_velocity)) % 1
            )
            S = self.observation.noise.noise_models[0].sample(key, xs_true)
            F = self.observation.mapping.mappings[0](true_params,  xs_true[:, None]).T
