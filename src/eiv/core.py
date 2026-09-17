@@ -540,7 +540,7 @@ class EIV(GPLVM):
         else:
            xs_true = jnp.array(
                (jnp.cumsum(jax.random.normal(key, shape=num_steps) * x_velocity)) % 1
-           )
+           )[:, None]
            S = self.observation.noise.noise_models[1].sample(key, xs_true)
            F = self.observation.mapping.mappings[0](true_params,  xs_true[:, None])
            Y = self.observation.noise.noise_models[0].sample(key, F)
