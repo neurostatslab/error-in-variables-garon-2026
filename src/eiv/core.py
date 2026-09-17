@@ -265,7 +265,7 @@ class GPLVM(AbstractGPLVM):
     
     def simulate(self, key, params, num_observations):
         k1, k2 = jax.random.split(key, 2)
-        
+            
         x = self.sampler.sample(
             k1, num_observations
         )
@@ -273,7 +273,7 @@ class GPLVM(AbstractGPLVM):
         y = self.observation.sample(
             k2, params, x
         )
-
+       
         return x, y
 
 
@@ -516,13 +516,14 @@ class EIV(GPLVM):
 
         super().__init__(observation=observation, sampler=sampler, num_samples=num_samples)
 
+        self.kappa = kappa
         self._sim_key = sim_key if sim_key is not None else jax.random.PRNGKey(0)
         self.params_ = None
 
     
 
 
-    def simulate(self, num_steps, true_params=None, key=None):
+    def simulate(self, num_steps, true_params=None, key=None, autocorrelated = False):
 
         if key is None:
             self._sim_key, key = jax.random.split(self._sim_key)
@@ -534,7 +535,19 @@ class EIV(GPLVM):
             
         self.true_params = true_params
         # Base class `simulate` has signature (key, params, num_observations).
-        return super().simulate(key, true_params, num_steps)
+        if not autocorrelated:
+            return super().simulate(key, true_params, num_steps)
+        else:
+           xs_true = jnp.array(
+               (np.cumsum(np.random.randn(num_steps) * x_velocity)) % 1
+           )
+           S = self.observation.noise.noise_models[0].sample(key, xs_true)
+           F = self.observation.mapping.mappings[0](true_params,  xs_true[:, None]).T
+           Y = self.observation.noise.noise_models[0].sample(key, F)
+       
+           ys = tuple((Y, S))
+
+           return xs_true, ys 
 
 
 
