@@ -549,6 +549,48 @@ class EIV(GPLVM):
 
            return xs_true[:, None], ys 
 
+    def fisher_information(self, params, s, key, num_mc_samples=1000):
+        """Monte Carlo estimate of the Fisher information about the stimulus s
+        carried by the neural response y, with the latent x integrated out:
+
+            J(s) = E_{y ~ p(y|s)} [ score(y) score(y)^T ],  score(y) = d/ds log p(y | s)
+
+        Parameters
+        ----------
+        params : array, shape (params_per_neuron, num_neurons)
+            Tuning curve parameters (e.g. ``model.params_`` or ``model.true_params``).
+        s : array, shape (num_dims,)
+            Stimulus value in [0, 1).
+        key : jax.random.PRNGKey
+        num_mc_samples : int
+            Number of samples of y used in the Monte Carlo average.
+
+        Returns
+        -------
+        J : array, shape (num_dims, num_dims)
+            Monte Carlo estimate of the Fisher information.
+        J_sem : array, shape (num_dims, num_dims)
+            Standard error of the Monte Carlo estimate (elementwise).
+        """
+        spike_noise, behav_noise = self.observation.noise.noise_models
+        tuning_curves = self.observation.mapping.mappings[0]
+        k1, k2, k3 = jax.random.split(key, 3)
+
+        # Draw y ~ p(y | s). Since x has a uniform prior and the von Mises is
+        # symmetric in (x, s), p(x | s) = p(s | x), so x ~ VonMises(s, kappa).
+        S = jnp.tile(s, (num_mc_samples, 1))
+        X = behav_noise.sample(k1, S)
+        Y = spike_noise.sample(k2, tuning_curves(params, X))
+
+        # marginal_log_likelihood_params returns log p(y_i, s_i) for each row i,
+        # which equals log p(y_i | s_i) up to a constant since p(s) is uniform.
+        # Row i depends only on S[i], so the gradient of the sum gives each score.
+        log_p = lambda S: jnp.sum(self.marginal_log_likelihood_params(params, (Y, S), k3))
+        scores = jax.grad(log_p)(S)
+
+        outer = scores[:, :, None] * scores[:, None, :]
+        return outer.mean(axis=0), outer.std(axis=0) / jnp.sqrt(num_mc_samples)
+
 
 
 class DynamicEIV(DynamicGPLVM):
