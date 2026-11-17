@@ -3,6 +3,7 @@ import jax.numpy as jnp
 import numpy as np
 from typing import Literal
 from functools import partialmethod
+import tqdm
 from . import mappings
 
 def get_obs_tuning(n_bins, n_neurons, spikes, headdir):
