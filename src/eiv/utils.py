@@ -3,7 +3,17 @@ import jax.numpy as jnp
 import numpy as np
 from typing import Literal
 from functools import partialmethod
+
+import jax
+import matplotlib.pyplot as plt
+
+import time
+
 import tqdm
+from eiv.core import EIV
+
+
+
 from . import mappings
 
 def get_obs_tuning(n_bins, n_neurons, spikes, headdir):
