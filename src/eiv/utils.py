@@ -379,7 +379,7 @@ def plot_tuning_fig2(model, y_and_s, grid_reso=20, max_plot = 5, grid_max = 1):
 
 
 def cross_val_kappa(y_and_s, kappa_bounds =  [0.5, 1000.], out_scale =100., len_scale = .2,
-                    resolution = 20, scale: Literal["linear", "geometric"] = "geometric",
+                    num_dims = 1, resolution = 20, scale: Literal["linear", "geometric"] = "geometric",
                     n_folds = 1, split = .5):
 
     tqdm.__init__ = partialmethod(tqdm.__init__, disable=True)
