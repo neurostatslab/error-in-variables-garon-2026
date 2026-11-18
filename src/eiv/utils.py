@@ -301,7 +301,7 @@ def plot_behav_fig2(model, y_and_s, xs_gen = None, window = [0, -1]):
     start, end = window
     axes.plot(y_and_s[1][start:end], color="k")
     if xs_gen is not None:
-      axes.plot(xs_true[start:end],label = "Inferred Latent", color = "g")
+      axes.plot(xs_gen[start:end],label = "Inferred Latent", color = "g")
     axes.legend(loc="lower left")
     axes.set_yticks([0, 0.5, 1], [r'$0$',r'$\pi$',  r'2$\pi$'])
     axes.set(xlabel="Time", ylabel="Inferred Latent (X)")
