@@ -276,7 +276,7 @@ def jax_array_to_list(d):
     
 def plot_hist_fig2(model, y_and_s, xs_gen = None, grid_reso=100, grid_max = 1):
     fig, axes = plt.subplots(1, 1, sharey=True, sharex=True, figsize=(2,2))
-    x_grid = utils.make_xgrid(1, grid_reso, grid_max)
+    x_grid = make_xgrid(1, grid_reso, grid_max)
     est_logpost = model.logp_x(model.params_, y_and_s[0], x_grid)
     est_x_map = x_grid[jnp.argmax(est_logpost, axis=1)].ravel()
 
@@ -326,7 +326,7 @@ def plot_recon_fig2(model, y_and_s, xs_gen = None, grid_reso=100, grid_max = 1):
 
     fig, axes = plt.subplots(1, 1, sharey=True, sharex=True, figsize=(2,2))
 
-    x_grid = utils.make_xgrid(1, grid_reso, grid_max)
+    x_grid = make_xgrid(1, grid_reso, grid_max)
     est_logpost = model.logp_x(model.params_, y_and_s[0], x_grid)
     est_x_map = x_grid[jnp.argmax(est_logpost, axis=1)].ravel()
 
@@ -348,7 +348,7 @@ def plot_tuning_fig2(model, y_and_s, grid_reso=20, max_plot = 5, grid_max = 1):
 
     num_timepoints, num_neurons = y_and_s[0].shape
 
-    x_grid = utils.make_xgrid(1, grid_reso, grid_max)
+    x_grid = make_xgrid(1, grid_reso, grid_max)
 
 
     if hasattr(model, "true_params"):
