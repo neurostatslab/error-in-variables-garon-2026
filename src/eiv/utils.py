@@ -356,7 +356,7 @@ def plot_tuning_fig2(model, y_and_s, grid_reso=20, max_plot = 5, grid_max = 1):
 
     fig, axes = plt.subplots(max_plot, 4, sharey=True, sharex=True, figsize=(8,2*max_plot))
 
-    obs_tuning, obs_bins = utils.get_obs_tuning(grid_reso, num_neurons, y_and_s[0], y_and_s[1])
+    obs_tuning, obs_bins = get_obs_tuning(grid_reso, num_neurons, y_and_s[0], y_and_s[1])
 
 
     if hasattr(model, "params_"):
