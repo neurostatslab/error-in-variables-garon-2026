@@ -477,7 +477,7 @@ class EIV(GPLVM):
         behav_noise = noise_models.VonMisesNormed,
         behav_obs_kwargs=None,
         spike_obs_kwargs= None,
-        num_samples=512, sampler=None,
+        num_samples=1024, sampler=None,
         sim_key = None
         ):
 
@@ -565,7 +565,7 @@ class DynamicEIV(DynamicGPLVM):
         proposal_kwargs = None,
         behav_obs_kwargs = None,
         spike_obs_kwargs = None,
-        num_samples=100, sim_key = None
+        num_samples=300, sim_key = None
         ):
 
         self.num_neurons = num_neurons
